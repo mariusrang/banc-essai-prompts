@@ -181,10 +181,12 @@ button.run:disabled{background:var(--rule-strong);cursor:not-allowed}
     <input type="text" id="nom" value="Classification de tickets" />
     <div style="height:14px"></div>
     <label class="field" for="prompt">Consigne</label>
-    <textarea id="prompt">Tu classes des tickets de support client.
-
-Réponds par une seule catégorie, en minuscules, sans phrase autour :
-facturation, technique, ou commercial.</textarea>
+    <textarea id="prompt"></textarea>
+    <div class="row-actions">
+      <button class="ghost" id="p-vague">Consigne vague</button>
+      <button class="ghost" id="p-cadree">Consigne cadrée</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Lancez la même série avec les deux, puis comparez dans l'historique. L'écart mesure ce que rapporte une contrainte de format.</p>
   </section>
 
   <section class="panel">
@@ -211,8 +213,8 @@ facturation, technique, ou commercial.</textarea>
       </div>
       <div>
         <label class="field" for="temp">Température</label>
-        <div class="knob-val mono" id="temp-v">0.7</div>
-        <input type="range" id="temp" min="0" max="1" step="0.1" value="0.7" />
+        <div class="knob-val mono" id="temp-v">1.0</div>
+        <input type="range" id="temp" min="0" max="1" step="0.1" value="1" />
       </div>
       <div>
         <label class="field" for="mode">Méthode de comparaison</label>
@@ -261,15 +263,26 @@ facturation, technique, ou commercial.</textarea>
 const API = 'https://mariusrang.app.n8n.cloud/webhook';
 
 const DEMO = [
-  ["Je n'arrive pas à me connecter depuis hier","technique"],
-  ["Vous m'avez facturé deux fois ce mois-ci","facturation"],
-  ["Combien coûte le plan entreprise ?","commercial"],
-  ["Ça marche plus et en plus on m'a prélevé","facturation"],
-  ["L'export CSV renvoie un fichier vide","technique"],
-  ["Je voudrais une démo pour mon équipe","commercial"],
-  ["Comment annuler mon abonnement ?","facturation"],
-  ["La page reste blanche sur Safari","technique"]
+  ["Je veux arrêter, ça bug tout le temps","facturation"],
+  ["Le paiement échoue quand je clique sur valider","technique"],
+  ["Facture erronée à cause d'un bug d'affichage","facturation"],
+  ["On est 50 maintenant, il me faut plus de licences et j'ai un souci de connexion","commercial"],
+  ["Votre offre pro inclut le SSO ? on n'arrive pas à le configurer","commercial"],
+  ["Depuis la mise à jour de prix, l'app est lente","technique"],
+  ["Merci pour votre aide hier","commercial"],
+  ["Pourquoi mon prélèvement est passé de 29 à 49 euros","facturation"]
 ];
+
+const PROMPTS = {
+  vague: {
+    nom: "Consigne vague",
+    texte: "Regarde ce ticket de support client et indique de quelle catégorie il relève."
+  },
+  cadree: {
+    nom: "Consigne cadrée",
+    texte: "Tu classes des tickets de support client.\n\nRéponds par une seule catégorie, en minuscules, sans phrase autour :\nfacturation, technique, ou commercial.\n\nQuand un ticket mélange plusieurs sujets, retiens celui sur lequel le client attend une action, pas celui qu'il mentionne en passant.\nSi rien ne correspond, réponds commercial."
+  }
+};
 
 const $ = id => document.getElementById(id);
 let poll = null;
@@ -468,6 +481,12 @@ function show(which){
 }
 
 /* ---------- init ---------- */
+function setPrompt(key){
+  $('prompt').value = PROMPTS[key].texte;
+  $('nom').value = 'Tickets ambigus — ' + PROMPTS[key].nom;
+}
+$('p-vague').onclick = () => setPrompt('vague');
+$('p-cadree').onclick = () => setPrompt('cadree');
 $('add').onclick = () => { $('cases').appendChild(caseRow()); estimate(); };
 $('load-demo').onclick = loadDemo;
 $('run').onclick = run;
@@ -475,6 +494,7 @@ $('rep').oninput = e => { $('rep-v').textContent = e.target.value; estimate(); }
 $('temp').oninput = e => { $('temp-v').textContent = Number(e.target.value).toFixed(1); };
 $('tab-bench').onclick = () => show('bench');
 $('tab-hist').onclick = () => show('hist');
+setPrompt('cadree');
 loadDemo();
 </script>
 </body>
