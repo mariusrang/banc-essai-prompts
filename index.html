@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Banc d'essai — mesurer la fiabilité d'un prompt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F7F4;
+  --card:#FFFFFF;
+  --ink:#16211C;
+  --ink-soft:#5A6661;
+  --ink-faint:#8B958F;
+  --rule:#DDE1DB;
+  --rule-strong:#C3C9C1;
+  --signal:#2F6F4E;
+  --signal-bg:#E6F0E9;
+  --drift:#A8730A;
+  --drift-bg:#FBF1DD;
+  --fault:#A03232;
+  --fault-bg:#F8E8E6;
+  --slate:#3A5A78;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Archivo',system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px}
+
+header{border-bottom:1px solid var(--rule);margin-bottom:32px}
+.head-in{max-width:1000px;margin:0 auto;padding:28px 24px 0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:24px;justify-content:space-between}
+h1{font-size:23px;font-weight:600;margin:0;letter-spacing:-0.01em}
+.tagline{color:var(--ink-soft);font-size:14px;margin:4px 0 0;max-width:52ch}
+nav{display:flex;gap:2px;margin-top:20px}
+nav button{
+  font-family:inherit;font-size:14px;background:none;border:0;
+  border-bottom:2px solid transparent;color:var(--ink-soft);
+  padding:8px 14px;cursor:pointer;
+}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+nav button:hover{color:var(--ink)}
+
+h2{font-size:17px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
+.hint{color:var(--ink-soft);font-size:13.5px;margin:0 0 14px;max-width:70ch}
+
+section.panel{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:22px 24px;margin-bottom:20px}
+
+label.field{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px}
+textarea,input[type=text],select{
+  width:100%;font-family:inherit;font-size:14.5px;color:var(--ink);
+  background:var(--paper);border:1px solid var(--rule-strong);border-radius:3px;
+  padding:10px 12px;
+}
+textarea{min-height:120px;resize:vertical;line-height:1.55}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--slate);outline-offset:1px;border-color:var(--slate)}
+
+table.cases{width:100%;border-collapse:collapse;table-layout:fixed}
+table.cases th{
+  text-align:left;font-size:12.5px;font-weight:500;color:var(--ink-faint);
+  padding:0 0 6px;border-bottom:1px solid var(--rule)
+}
+table.cases td{padding:5px 0;vertical-align:top}
+table.cases td.g{padding-right:8px}
+table.cases input{font-size:14px;padding:8px 10px}
+th.c-in{width:56%} th.c-out{width:32%} th.c-x{width:12%}
+button.mini{
+  font-family:inherit;font-size:13px;background:none;color:var(--ink-soft);
+  border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;cursor:pointer;width:100%
+}
+button.mini:hover{border-color:var(--fault);color:var(--fault)}
+
+.row-actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+button.ghost{
+  font-family:inherit;font-size:13.5px;background:none;color:var(--ink);
+  border:1px solid var(--rule-strong);border-radius:3px;padding:8px 14px;cursor:pointer
+}
+button.ghost:hover{border-color:var(--ink)}
+
+.knobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;margin-top:4px}
+input[type=range]{width:100%;accent-color:var(--slate)}
+.knob-val{font-size:20px;font-weight:500;letter-spacing:-0.01em}
+
+.launch{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:22px;padding-top:20px;border-top:1px solid var(--rule)}
+button.run{
+  font-family:inherit;font-size:15px;font-weight:500;background:var(--ink);color:#fff;
+  border:0;border-radius:3px;padding:12px 22px;cursor:pointer
+}
+button.run:hover{background:#233028}
+button.run:disabled{background:var(--rule-strong);cursor:not-allowed}
+.launch .est{font-size:13px;color:var(--ink-soft)}
+.err{color:var(--fault);font-size:13.5px;margin-top:10px}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:22px}
+.metric{background:var(--card);padding:16px 18px}
+.metric .k{font-size:12.5px;color:var(--ink-soft)}
+.metric .v{font-size:29px;font-weight:500;letter-spacing:-0.02em;margin-top:2px;line-height:1.15}
+.metric .v small{font-size:15px;font-weight:400;color:var(--ink-faint)}
+
+.case{border-bottom:1px solid var(--rule);padding:14px 0}
+.case:last-child{border-bottom:0}
+.case-head{display:flex;gap:16px;align-items:flex-start;cursor:pointer}
+.case-head:focus-visible{outline:2px solid var(--slate);outline-offset:2px}
+.case-body{flex:1;min-width:0}
+.case-in{font-size:14.5px;margin:0;overflow-wrap:anywhere}
+.case-meta{font-size:12.5px;color:var(--ink-faint);margin:3px 0 0}
+
+.strip{display:flex;gap:3px;flex-shrink:0;padding-top:3px}
+.tick{width:13px;height:22px;border-radius:1px;background:var(--rule-strong)}
+.tick.ok{background:var(--signal)}
+.tick.ko{background:var(--fault)}
+
+.tag{font-size:12px;padding:3px 9px;border-radius:2px;flex-shrink:0;white-space:nowrap}
+.tag.ok{background:var(--signal-bg);color:var(--signal)}
+.tag.drift{background:var(--drift-bg);color:var(--drift)}
+.tag.ko{background:var(--fault-bg);color:var(--fault)}
+
+.detail{margin:12px 0 2px;padding:12px 14px;background:var(--paper);border-left:2px solid var(--rule-strong);border-radius:0}
+.detail p{margin:0 0 8px;font-size:13px;color:var(--ink-soft)}
+.detail ul{margin:0;padding-left:18px}
+.detail li{font-size:13.5px;margin-bottom:5px;overflow-wrap:anywhere}
+.detail .out{font-size:13.5px}
+
+.bar-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
+.bar-row:last-child{border-bottom:0}
+.bar-name{width:34%;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:20px;background:var(--paper);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;background:var(--signal);display:flex;align-items:center;padding-left:7px}
+.bar-fill span{font-size:11.5px;color:#fff}
+.bar-meta{font-size:12.5px;color:var(--ink-faint);width:112px;text-align:right;flex-shrink:0}
+
+.empty{color:var(--ink-soft);font-size:14px;padding:26px 0}
+.status{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink-soft);padding:18px 0}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--slate);animation:p 1.3s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none;opacity:.7}}
+
+.hidden{display:none}
+@media(max-width:640px){
+  .case-head{flex-wrap:wrap}
+  .bar-name{width:100%}
+  .bar-row{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div>
+      <h1>Banc d'essai</h1>
+      <p class="tagline">Un prompt qui marche une fois n'a rien prouvé. Répétez-le, mesurez ce qui change.</p>
+    </div>
+  </div>
+  <div class="head-in" style="padding-top:0">
+    <nav role="tablist">
+      <button id="tab-bench" role="tab" aria-selected="true">Essai</button>
+      <button id="tab-hist" role="tab" aria-selected="false">Historique</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ESSAI -->
+<div id="view-bench">
+
+  <section class="panel">
+    <h2>Le prompt à tester</h2>
+    <p class="hint">Il sera envoyé comme consigne système. Chaque cas de test ci-dessous sera soumis comme message utilisateur.</p>
+    <label class="field" for="nom">Nom de l'essai</label>
+    <input type="text" id="nom" value="Classification de tickets" />
+    <div style="height:14px"></div>
+    <label class="field" for="prompt">Consigne</label>
+    <textarea id="prompt">Tu classes des tickets de support client.
+
+Réponds par une seule catégorie, en minuscules, sans phrase autour :
+facturation, technique, ou commercial.</textarea>
+  </section>
+
+  <section class="panel">
+    <h2>Cas de test</h2>
+    <p class="hint">L'entrée soumise au modèle, et la réponse que vous considérez correcte.</p>
+    <table class="cases">
+      <thead><tr><th class="c-in">Entrée</th><th class="c-out">Réponse attendue</th><th class="c-x"></th></tr></thead>
+      <tbody id="cases"></tbody>
+    </table>
+    <div class="row-actions">
+      <button class="ghost" id="add">Ajouter un cas</button>
+      <button class="ghost" id="load-demo">Charger le jeu d'exemple</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Conditions de mesure</h2>
+    <p class="hint">Répéter chaque cas est ce qui révèle l'instabilité. Une seule répétition ne mesure rien.</p>
+    <div class="knobs">
+      <div>
+        <label class="field" for="rep">Répétitions par cas</label>
+        <div class="knob-val mono" id="rep-v">3</div>
+        <input type="range" id="rep" min="1" max="5" step="1" value="3" />
+      </div>
+      <div>
+        <label class="field" for="temp">Température</label>
+        <div class="knob-val mono" id="temp-v">0.7</div>
+        <input type="range" id="temp" min="0" max="1" step="0.1" value="0.7" />
+      </div>
+      <div>
+        <label class="field" for="mode">Méthode de comparaison</label>
+        <select id="mode">
+          <option value="exact">Correspondance exacte</option>
+          <option value="juge">Jugement par un second modèle</option>
+        </select>
+      </div>
+    </div>
+    <div class="launch">
+      <button class="run" id="run">Lancer l'essai</button>
+      <span class="est" id="est"></span>
+    </div>
+    <div class="err hidden" id="err"></div>
+  </section>
+
+  <div id="running" class="hidden">
+    <section class="panel">
+      <div class="status"><span class="pulse"></span><span id="running-txt">Essai en cours…</span></div>
+    </section>
+  </div>
+
+  <div id="results" class="hidden">
+    <section class="panel">
+      <h2 id="res-title">Résultats</h2>
+      <p class="hint" id="res-sub"></p>
+      <div class="metrics" id="metrics"></div>
+      <div id="cases-out"></div>
+    </section>
+  </div>
+
+</div>
+
+<!-- HISTORIQUE -->
+<div id="view-hist" class="hidden">
+  <section class="panel">
+    <h2>Essais précédents</h2>
+    <p class="hint">Chaque barre est un taux de réussite. Cliquez pour rouvrir un essai.</p>
+    <div id="hist"><div class="empty">Chargement…</div></div>
+  </section>
+</div>
+
+</div>
+
+<script>
+const API = 'https://mariusrang.app.n8n.cloud/webhook';
+
+const DEMO = [
+  ["Je n'arrive pas à me connecter depuis hier","technique"],
+  ["Vous m'avez facturé deux fois ce mois-ci","facturation"],
+  ["Combien coûte le plan entreprise ?","commercial"],
+  ["Ça marche plus et en plus on m'a prélevé","facturation"],
+  ["L'export CSV renvoie un fichier vide","technique"],
+  ["Je voudrais une démo pour mon équipe","commercial"],
+  ["Comment annuler mon abonnement ?","facturation"],
+  ["La page reste blanche sur Safari","technique"]
+];
+
+const $ = id => document.getElementById(id);
+let poll = null;
+
+/* ---------- cas de test ---------- */
+function caseRow(entree='', attendu=''){
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td class="g"><input type="text" class="in" /></td>' +
+    '<td class="g"><input type="text" class="out" /></td>' +
+    '<td><button class="mini" type="button">Retirer</button></td>';
+  tr.querySelector('.in').value = entree;
+  tr.querySelector('.out').value = attendu;
+  tr.querySelector('button').onclick = () => { tr.remove(); estimate(); };
+  return tr;
+}
+function readCases(){
+  return [...$('cases').querySelectorAll('tr')].map(tr => ({
+    entree: tr.querySelector('.in').value.trim(),
+    attendu: tr.querySelector('.out').value.trim()
+  })).filter(c => c.entree);
+}
+function loadDemo(){
+  $('cases').innerHTML = '';
+  DEMO.forEach(([a,b]) => $('cases').appendChild(caseRow(a,b)));
+  estimate();
+}
+function estimate(){
+  const n = readCases().length * Number($('rep').value);
+  $('est').textContent = n ? n + ' appels au modèle, environ ' + Math.max(1, Math.round(n*1.3/60)) + ' min' : 'Ajoutez au moins un cas';
+  $('run').disabled = n === 0;
+}
+
+/* ---------- lancement ---------- */
+async function run(){
+  const cas = readCases();
+  const prompt = $('prompt').value.trim();
+  $('err').classList.add('hidden');
+
+  if(!prompt){ return fail("Écrivez une consigne avant de lancer."); }
+  if(!cas.length){ return fail("Ajoutez au moins un cas de test."); }
+
+  $('run').disabled = true;
+  $('results').classList.add('hidden');
+  $('running').classList.remove('hidden');
+  $('running-txt').textContent = 'Envoi de l\'essai…';
+
+  try{
+    const r = await fetch(API + '/eval-run', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        nom: $('nom').value.trim() || 'Essai sans nom',
+        prompt,
+        mode: $('mode').value,
+        repetitions: Number($('rep').value),
+        temperature: Number($('temp').value),
+        cas
+      })
+    });
+    const data = await r.json();
+    if(!r.ok || !data.campagneId){
+      throw new Error(data.erreur || 'Le moteur a refusé la requête.');
+    }
+    $('running-txt').textContent = data.nbAppels + ' appels lancés. Les résultats arrivent au fur et à mesure…';
+    watch(data.campagneId);
+  }catch(e){
+    $('running').classList.add('hidden');
+    fail("Impossible de joindre le moteur. " + e.message);
+  }
+}
+function fail(msg){
+  $('err').textContent = msg;
+  $('err').classList.remove('hidden');
+  $('run').disabled = false;
+}
+
+/* ---------- suivi ---------- */
+function watch(id){
+  clearInterval(poll);
+  let tries = 0;
+  poll = setInterval(async () => {
+    tries++;
+    if(tries > 120){ clearInterval(poll); $('running').classList.add('hidden'); fail("L'essai prend anormalement longtemps. Regardez l'onglet Executions dans n8n."); return; }
+    try{
+      const r = await fetch(API + '/eval-results?campagneId=' + encodeURIComponent(id) + '&t=' + Date.now());
+      const d = await r.json();
+      if(d.type === 'campagne'){
+        clearInterval(poll);
+        $('running').classList.add('hidden');
+        $('run').disabled = false;
+        render(d);
+      }
+    }catch(e){ /* on retente au tick suivant */ }
+  }, 3000);
+}
+
+/* ---------- rendu ---------- */
+function render(d){
+  const c = d.campagne;
+  const instables = d.cas.filter(x => x.statut === 'instable').length;
+  const echoues = d.cas.filter(x => x.statut === 'echec').length;
+
+  $('res-title').textContent = c.nom;
+  $('res-sub').textContent = c.nbCas + ' cas · ' + c.repetitions + ' répétitions · température ' +
+    c.temperature + ' · comparaison ' + (c.mode === 'juge' ? 'par modèle juge' : 'exacte');
+
+  $('metrics').innerHTML = [
+    card('Taux de réussite', c.tauxReussite + '<small>%</small>'),
+    card('Cas instables', instables),
+    card('Cas toujours faux', echoues),
+    card('Appels effectués', c.nbAppels)
+  ].join('');
+
+  const byCase = {};
+  d.detail.forEach(x => { (byCase[x.casId] = byCase[x.casId] || []).push(x); });
+
+  $('cases-out').innerHTML = d.cas.map(cas => {
+    const runs = (byCase[cas.casId] || []).sort((a,b) => a.repetition - b.repetition);
+    const strip = runs.map(r => '<div class="tick ' + (r.reussi ? 'ok':'ko') + '"></div>').join('');
+    const tag = cas.statut === 'reussi' ? '<span class="tag ok">stable</span>'
+              : cas.statut === 'instable' ? '<span class="tag drift">instable</span>'
+              : '<span class="tag ko">échec</span>';
+    const sorties = cas.sortiesDistinctes.length > 1
+      ? '<p>' + cas.sortiesDistinctes.length + ' réponses différentes pour la même entrée :</p><ul>' +
+        cas.sortiesDistinctes.map(s => '<li class="mono out">' + esc(s || '(vide)') + '</li>').join('') + '</ul>'
+      : '<p>Réponse constante :</p><ul><li class="mono out">' + esc(cas.exemple || '(vide)') + '</li></ul>';
+    const just = runs.filter(r => r.justification).slice(0,3)
+      .map(r => '<li>' + esc(r.justification) + '</li>').join('');
+
+    return '<div class="case">' +
+      '<div class="case-head" tabindex="0" role="button" aria-expanded="false">' +
+        '<div class="case-body">' +
+          '<p class="case-in">' + esc(cas.entree) + '</p>' +
+          '<p class="case-meta">attendu <span class="mono">' + esc(cas.attendu) + '</span> · ' +
+             cas.reussites + '/' + cas.total + '</p>' +
+        '</div>' + tag +
+        '<div class="strip">' + strip + '</div>' +
+      '</div>' +
+      '<div class="detail hidden">' + sorties +
+        (just ? '<p>Verdicts :</p><ul>' + just + '</ul>' : '') +
+      '</div></div>';
+  }).join('');
+
+  [...$('cases-out').querySelectorAll('.case-head')].forEach(h => {
+    const toggle = () => {
+      const d = h.nextElementSibling;
+      const open = d.classList.toggle('hidden');
+      h.setAttribute('aria-expanded', String(!open));
+    };
+    h.onclick = toggle;
+    h.onkeydown = e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } };
+  });
+
+  $('results').classList.remove('hidden');
+  $('results').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function card(k,v){ return '<div class="metric"><div class="k">'+k+'</div><div class="v mono">'+v+'</div></div>'; }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+/* ---------- historique ---------- */
+async function history(){
+  $('hist').innerHTML = '<div class="empty">Chargement…</div>';
+  try{
+    const r = await fetch(API + '/eval-results?t=' + Date.now());
+    const d = await r.json();
+    const done = (d.campagnes || []).filter(c => c.statut === 'termine' && c.tauxReussite != null);
+    if(!done.length){ $('hist').innerHTML = '<div class="empty">Aucun essai terminé pour l\'instant.</div>'; return; }
+    $('hist').innerHTML = done.map(c =>
+      '<div class="bar-row" data-id="' + c.campagneId + '">' +
+        '<div class="bar-name">' + esc(c.nom) + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(c.tauxReussite,8) + '%">' +
+          '<span class="mono">' + c.tauxReussite + '%</span></div></div>' +
+        '<div class="bar-meta mono">' + (c.casInstables ?? 0) + ' instables</div>' +
+      '</div>').join('');
+    [...$('hist').querySelectorAll('.bar-row')].forEach(row => {
+      row.onclick = async () => {
+        const r2 = await fetch(API + '/eval-results?campagneId=' + encodeURIComponent(row.dataset.id) + '&t=' + Date.now());
+        const d2 = await r2.json();
+        if(d2.type === 'campagne'){ show('bench'); render(d2); }
+      };
+    });
+  }catch(e){
+    $('hist').innerHTML = '<div class="empty">L\'API de lecture ne répond pas. Vérifiez que le workflow est publié.</div>';
+  }
+}
+
+/* ---------- onglets ---------- */
+function show(which){
+  const bench = which === 'bench';
+  $('view-bench').classList.toggle('hidden', !bench);
+  $('view-hist').classList.toggle('hidden', bench);
+  $('tab-bench').setAttribute('aria-selected', String(bench));
+  $('tab-hist').setAttribute('aria-selected', String(!bench));
+  if(!bench) history();
+}
+
+/* ---------- init ---------- */
+$('add').onclick = () => { $('cases').appendChild(caseRow()); estimate(); };
+$('load-demo').onclick = loadDemo;
+$('run').onclick = run;
+$('rep').oninput = e => { $('rep-v').textContent = e.target.value; estimate(); };
+$('temp').oninput = e => { $('temp-v').textContent = Number(e.target.value).toFixed(1); };
+$('tab-bench').onclick = () => show('bench');
+$('tab-hist').onclick = () => show('hist');
+loadDemo();
+</script>
+</body>
+</html>
