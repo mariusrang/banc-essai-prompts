@@ -492,7 +492,7 @@ function render(d){
   st+=stat('Unstable cases',inst,inst?'warn':'')+stat('Always wrong',ech,ech?'bad':'')+stat('Passes',c.nbAppels,'');
   $('stats').innerHTML=st;
 
-  $('rows').innerHTML=d.cas.map((cas,i)=>{
+  $('rows').innerHTML=(c.resultatsManquants?'<tr><td colspan="5" style="padding:14px 0"><div class="err">The campaign finished but no per-case rows were written. This usually means a column is missing in the <span class="mono">resultats</span> sheet (check that it has a <span class="mono">Score</span> column), or the workflow was not republished after the last change.</div></td></tr>':'')+d.cas.map((cas,i)=>{
     const runs=(byCase[cas.casId]||[]).sort((a,b)=>a.repetition-b.repetition);
     const strip='<span class="strip">'+runs.map(r=>'<i class="'+(r.reussi?'ok':'ko')+'" title="pass '+r.repetition+(r.score!=null?' · '+r.score+'/10':'')+'"></i>').join('')+'</span>';
     const badge=cas.statut==='reussi'?'<span class="badge ok"><i></i>stable</span>':cas.statut==='instable'?'<span class="badge warn"><i></i>'+cas.reussites+' ≠ '+cas.total+'</span>':'<span class="badge bad"><i></i>failed</span>';
