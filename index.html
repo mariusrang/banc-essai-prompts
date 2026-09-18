@@ -1,501 +1,558 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Banc d'essai — mesurer la fiabilité d'un prompt</title>
+<title>Prompt Test Bench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#F6F7F4;
-  --card:#FFFFFF;
-  --ink:#16211C;
-  --ink-soft:#5A6661;
-  --ink-faint:#8B958F;
-  --rule:#DDE1DB;
-  --rule-strong:#C3C9C1;
-  --signal:#2F6F4E;
-  --signal-bg:#E6F0E9;
-  --drift:#A8730A;
-  --drift-bg:#FBF1DD;
-  --fault:#A03232;
-  --fault-bg:#F8E8E6;
-  --slate:#3A5A78;
+  --canvas:#ffffff; --cloud:#f6f8fa; --frost:#eceff3;
+  --ash:#cdd2d9; --mist:#c1c7d0;
+  --fog:#a4abb8; --steel:#818898; --slate:#666d80; --graphite:#36394a; --midnight:#272835; --onyx:#1a1b25;
+  --violet:#5e4cff; --lavender:#c8ccf3; --lilac:#dfdbff;
+  --ok:#1f8a4c; --ok-bg:#e3f4ea; --warn:#b26a00; --warn-bg:#fdf1dc; --bad:#c62b2b; --bad-bg:#fbe5e5;
+  --display:'Space Grotesk',ui-sans-serif,system-ui,sans-serif;
+  --sans:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --shadow-card:rgba(39,40,53,0.1) 0 0 0 1px;
+  --shadow-elev:rgba(39,40,53,0.1) 0 0 0 1px, rgba(39,40,53,0.08) 0 24px 24px -12px, rgba(39,40,53,0.08) 0 12px 12px -6px, rgba(39,40,53,0.08) 0 6px 6px -3px, rgba(39,40,53,0.08) 0 2px 2px -1px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{
-  background:var(--paper);
-  color:var(--ink);
-  font-family:'Archivo',system-ui,sans-serif;
-  font-size:15px;
-  line-height:1.6;
-  -webkit-font-smoothing:antialiased;
+body{background:var(--canvas);color:var(--graphite);font-family:var(--sans);font-size:14px;line-height:1.63;letter-spacing:-.14px;-webkit-font-smoothing:antialiased}
+button,input,textarea{font-family:inherit}
+.mono{font-family:var(--mono);letter-spacing:-.02em}
+.hidden{display:none !important}
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:10;background:var(--canvas);border-bottom:1px solid var(--ash);height:64px}
+.nav-in{max-width:1200px;margin:0 auto;padding:0 24px;height:100%;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;color:var(--graphite);letter-spacing:-.01em}
+.brand .bolt{width:22px;height:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.brand .bolt i{display:block;background:var(--violet);border-radius:1px}
+.brand .bolt i:nth-child(2),.brand .bolt i:nth-child(6){background:var(--lavender)}
+.brand .bolt i:nth-child(4),.brand .bolt i:nth-child(8){background:var(--lilac)}
+.links{display:flex;align-items:center;gap:6px}
+.links button{background:none;border:0;padding:8px 12px;border-radius:8px;font-size:14px;font-weight:500;color:var(--slate);cursor:pointer}
+.links button:hover{color:var(--graphite);background:var(--cloud)}
+.links button[aria-current="true"]{color:var(--graphite);background:var(--frost)}
+.btn{border:0;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;line-height:1.2;transition:background .12s}
+.btn-dark{background:var(--midnight);color:#fff}
+.btn-dark:hover{background:var(--onyx)}
+.btn-violet{background:var(--violet);color:#fff;padding:12px 24px}
+.btn-violet:hover{background:#4d3ce6}
+.btn-violet:disabled{background:var(--lavender);cursor:not-allowed}
+.btn-ghost{background:var(--canvas);color:var(--graphite);border:1px solid var(--ash)}
+.btn-ghost:hover{border-color:var(--steel)}
+.btn-text{background:none;border:0;padding:6px 8px;color:var(--violet);font-weight:500;cursor:pointer;border-radius:8px;font-size:13px}
+.btn-text:hover{background:var(--lilac)}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1200px;margin:0 auto;padding:40px 24px 80px}
+.grid{display:grid;grid-template-columns:280px 1fr;gap:24px;align-items:start}
+@media(max-width:960px){.grid{grid-template-columns:1fr}}
+.card{background:var(--canvas);border:1px solid var(--ash);border-radius:12px;padding:16px}
+.card.soft{background:var(--cloud);border-color:transparent}
+.card + .card{margin-top:16px}
+.side{position:sticky;top:88px}
+.side h4{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--steel);margin:0 0 12px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--frost);font-size:13px}
+.kv:first-of-type{border-top:0}
+.kv .k{color:var(--slate)}
+.kv .v{color:var(--graphite);font-weight:500;text-align:right;overflow-wrap:anywhere}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;background:var(--cloud);color:var(--graphite)}
+.badge.violet{background:var(--lilac);color:var(--violet)}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.bad{background:var(--bad-bg);color:var(--bad)}
+.badge i{width:6px;height:6px;border-radius:50%;background:currentColor}
+
+/* ---------- headings ---------- */
+.eyebrow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+.eyebrow .lab{font-size:12px;color:var(--steel);letter-spacing:-.14px}
+h1{font-family:var(--display);font-weight:600;font-size:48px;line-height:1.05;letter-spacing:-1px;color:var(--graphite);margin:0 0 8px;max-width:20ch}
+h1.md{font-size:32px;line-height:1.2;letter-spacing:-.64px}
+h2{font-family:var(--display);font-weight:500;font-size:24px;line-height:1.25;letter-spacing:-.48px;margin:0 0 4px;color:var(--graphite)}
+h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);letter-spacing:.01em}
+.sub{color:var(--slate);font-size:16px;letter-spacing:-.16px;margin:0 0 24px;max-width:60ch}
+.hero{position:relative;margin-bottom:24px}
+.mosaic{position:absolute;right:0;top:-6px;width:120px;height:80px;display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.mosaic i{display:block;border-radius:1px}
+@media(max-width:960px){.mosaic{display:none}}
+@media(max-width:640px){h1{font-size:34px;letter-spacing:-.6px}}
+
+/* ---------- form ---------- */
+label.f{display:block;font-size:13px;font-weight:500;color:var(--graphite);margin:0 0 6px}
+.help{font-size:13px;color:var(--slate);margin:6px 0 0;max-width:62ch}
+input[type=text],input[type=number],textarea{
+  width:100%;background:var(--canvas);border:1px solid var(--ash);border-radius:8px;
+  padding:10px 12px;font-size:14px;color:var(--graphite);letter-spacing:-.14px
 }
-.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px}
+input::placeholder,textarea::placeholder{color:var(--fog)}
+input:focus,textarea:focus{outline:0;border-color:var(--violet);box-shadow:0 0 0 3px rgba(94,76,255,.2)}
+textarea{min-height:160px;resize:vertical;line-height:1.55;font-family:var(--mono);font-size:13px;letter-spacing:-.02em}
+input[type=number]{width:84px}
+.f-row{margin-bottom:20px}
+.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.chips button{background:var(--cloud);border:0;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:500;color:var(--graphite);cursor:pointer}
+.chips button:hover{background:var(--frost)}
+.toggle{display:inline-flex;background:var(--cloud);border-radius:999px;padding:3px;gap:2px}
+.toggle button{background:none;border:1px solid transparent;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;color:var(--slate);cursor:pointer}
+.toggle button[aria-pressed="true"]{background:var(--canvas);color:var(--graphite);border-color:var(--ash);box-shadow:rgba(39,40,53,.08) 0 2px 2px -1px}
+.cases{border:1px solid var(--ash);border-radius:12px;overflow:hidden}
+.cr{display:grid;grid-template-columns:36px 1fr 1fr 36px;gap:8px;align-items:center;padding:8px 8px 8px 12px;border-top:1px solid var(--frost)}
+.cr:first-child{border-top:0}
+.cr.libre{grid-template-columns:36px 1fr 36px}
+.cr .l{font-size:12px;font-weight:600;color:var(--steel)}
+.cr input{border-color:transparent;background:var(--cloud);padding:8px 10px;font-size:13px}
+.cr input:focus{background:var(--canvas)}
+.cr .x{background:none;border:0;color:var(--fog);cursor:pointer;font-size:18px;line-height:1;border-radius:8px;width:32px;height:32px}
+.cr .x:hover{color:var(--bad);background:var(--bad-bg)}
+.cases-empty{padding:14px 12px;color:var(--fog);font-size:13px}
+.inline{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-end}
+.launch{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:8px;padding-top:20px;border-top:1px solid var(--frost)}
+.est{font-size:13px;color:var(--steel)}
+.err{margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--bad-bg);color:var(--bad);font-size:13px}
 
-header{border-bottom:1px solid var(--rule);margin-bottom:32px}
-.head-in{max-width:1000px;margin:0 auto;padding:28px 24px 0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:24px;justify-content:space-between}
-h1{font-size:23px;font-weight:600;margin:0;letter-spacing:-0.01em}
-.tagline{color:var(--ink-soft);font-size:14px;margin:4px 0 0;max-width:52ch}
-nav{display:flex;gap:2px;margin-top:20px}
-nav button{
-  font-family:inherit;font-size:14px;background:none;border:0;
-  border-bottom:2px solid transparent;color:var(--ink-soft);
-  padding:8px 14px;cursor:pointer;
-}
-nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
-nav button:hover{color:var(--ink)}
+/* ---------- running ---------- */
+.phases{margin:16px 0 0;padding:0;list-style:none}
+.phases li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--frost);color:var(--fog);font-size:14px}
+.phases li:first-child{border-top:0}
+.phases li i{width:8px;height:8px;border-radius:50%;background:var(--ash);flex-shrink:0}
+.phases li.on{color:var(--graphite)}
+.phases li.on i{background:var(--violet);animation:p 1.2s ease-in-out infinite}
+.phases li.done{color:var(--slate)}
+.phases li.done i{background:var(--ok)}
+@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.phases li.on i{animation:none}}
 
-h2{font-size:17px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
-.hint{color:var(--ink-soft);font-size:13.5px;margin:0 0 14px;max-width:70ch}
+/* ---------- results ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.stat{background:var(--cloud);border-radius:12px;padding:14px 16px}
+.stat .k{font-size:12px;color:var(--steel)}
+.stat .v{font-family:var(--display);font-weight:600;font-size:32px;line-height:1.1;letter-spacing:-.64px;margin-top:4px}
+.stat .v small{font-size:14px;font-weight:500;color:var(--steel);letter-spacing:0;margin-left:2px}
+.stat.ok .v{color:var(--ok)} .stat.warn .v{color:var(--warn)} .stat.bad .v{color:var(--bad)}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:12px;font-weight:500;color:var(--steel);padding:0 12px 10px 0;border-bottom:1px solid var(--ash)}
+thead th.r{text-align:right;padding-right:0}
+tbody td{padding:12px 12px 12px 0;border-bottom:1px solid var(--frost);vertical-align:top;font-size:14px}
+tbody td.r{text-align:right;padding-right:0;white-space:nowrap}
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover td{background:var(--cloud)}
+tbody tr.row.open td{background:var(--lilac)}
+td.l{width:40px;font-size:12px;font-weight:600;color:var(--steel);padding-top:15px}
+tr.open td.l{color:var(--violet)}
+td.q{overflow-wrap:anywhere}
+td.q .att{font-size:12px;color:var(--steel);margin-top:2px}
+td.q .att b{font-weight:500;color:var(--slate)}
+.strip{display:inline-flex;gap:3px;vertical-align:middle;margin-left:10px}
+.strip i{width:8px;height:16px;border-radius:2px;background:var(--ash)}
+.strip i.ok{background:var(--ok)} .strip i.ko{background:var(--bad)}
+tr.det td{background:var(--cloud);padding:12px 16px 14px 40px;border-bottom:1px solid var(--frost)}
+tr.det .lab{display:block;font-size:12px;color:var(--steel);margin:8px 0 6px}
+tr.det ul{margin:0;padding:0;list-style:none}
+tr.det li{padding:5px 0;font-size:13px;overflow-wrap:anywhere;color:var(--graphite)}
+tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+@media(max-width:800px){.two{grid-template-columns:1fr}}
+.obs{font-size:16px;line-height:1.5;letter-spacing:-.16px;color:var(--graphite);margin:8px 0 0}
+.lit{margin:8px 0 0;padding:0;list-style:none}
+.lit li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--frost);font-size:13px}
+.lit li:first-child{border-top:0}
+.lit .n{color:var(--steel);font-weight:600;margin-right:8px;font-size:12px}
 
-section.panel{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:22px 24px;margin-bottom:20px}
+/* correction */
+.corr{margin-top:24px}
+.corr .cols{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-top:12px}
+@media(max-width:800px){.corr .cols{grid-template-columns:1fr}}
+.term{background:var(--onyx);border-radius:12px;padding:16px;font-family:var(--mono);font-size:12.5px;line-height:1.6;letter-spacing:-.02em;color:#d5d9e2;white-space:pre-wrap;overflow-wrap:anywhere;max-height:380px;overflow:auto;margin:0}
+.term-h{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.term-h i{width:10px;height:10px;border-radius:50%;background:#3a3d4d}
+.term-h span{margin-left:auto;font-size:11px;color:var(--steel);font-family:var(--sans)}
+.probs{margin:8px 0 0;padding:0;list-style:none}
+.probs li{padding:10px 0;border-top:1px solid var(--frost);font-size:13px}
+.probs li:first-child{border-top:0}
+.probs li .n{display:inline-block;background:var(--warn-bg);color:var(--warn);font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;margin-right:8px}
+.probs li .why{display:block;color:var(--slate);margin-top:3px}
+.chg{margin:8px 0 0;padding:0;list-style:none}
+.chg li{padding:10px 0;border-top:1px solid var(--frost);font-size:13px}
+.chg li:first-child{border-top:0}
+.chg li b{display:block;font-weight:600;color:var(--graphite)}
+.chg li span{color:var(--slate)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 
-label.field{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px}
-textarea,input[type=text],select{
-  width:100%;font-family:inherit;font-size:14.5px;color:var(--ink);
-  background:var(--paper);border:1px solid var(--rule-strong);border-radius:3px;
-  padding:10px 12px;
-}
-textarea{min-height:120px;resize:vertical;line-height:1.55}
-textarea:focus,input:focus,select:focus{outline:2px solid var(--slate);outline-offset:1px;border-color:var(--slate)}
-
-table.cases{width:100%;border-collapse:collapse;table-layout:fixed}
-table.cases th{
-  text-align:left;font-size:12.5px;font-weight:500;color:var(--ink-faint);
-  padding:0 0 6px;border-bottom:1px solid var(--rule)
-}
-table.cases td{padding:5px 0;vertical-align:top}
-table.cases td.g{padding-right:8px}
-table.cases input{font-size:14px;padding:8px 10px}
-th.c-in{width:56%} th.c-out{width:32%} th.c-x{width:12%}
-button.mini{
-  font-family:inherit;font-size:13px;background:none;color:var(--ink-soft);
-  border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;cursor:pointer;width:100%
-}
-button.mini:hover{border-color:var(--fault);color:var(--fault)}
-
-.row-actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
-button.ghost{
-  font-family:inherit;font-size:13.5px;background:none;color:var(--ink);
-  border:1px solid var(--rule-strong);border-radius:3px;padding:8px 14px;cursor:pointer
-}
-button.ghost:hover{border-color:var(--ink)}
-
-.knobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;margin-top:4px}
-input[type=range]{width:100%;accent-color:var(--slate)}
-.knob-val{font-size:20px;font-weight:500;letter-spacing:-0.01em}
-
-.launch{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:22px;padding-top:20px;border-top:1px solid var(--rule)}
-button.run{
-  font-family:inherit;font-size:15px;font-weight:500;background:var(--ink);color:#fff;
-  border:0;border-radius:3px;padding:12px 22px;cursor:pointer
-}
-button.run:hover{background:#233028}
-button.run:disabled{background:var(--rule-strong);cursor:not-allowed}
-.launch .est{font-size:13px;color:var(--ink-soft)}
-.err{color:var(--fault);font-size:13.5px;margin-top:10px}
-
-.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:22px}
-.metric{background:var(--card);padding:16px 18px}
-.metric .k{font-size:12.5px;color:var(--ink-soft)}
-.metric .v{font-size:29px;font-weight:500;letter-spacing:-0.02em;margin-top:2px;line-height:1.15}
-.metric .v small{font-size:15px;font-weight:400;color:var(--ink-faint)}
-
-.case{border-bottom:1px solid var(--rule);padding:14px 0}
-.case:last-child{border-bottom:0}
-.case-head{display:flex;gap:16px;align-items:flex-start;cursor:pointer}
-.case-head:focus-visible{outline:2px solid var(--slate);outline-offset:2px}
-.case-body{flex:1;min-width:0}
-.case-in{font-size:14.5px;margin:0;overflow-wrap:anywhere}
-.case-meta{font-size:12.5px;color:var(--ink-faint);margin:3px 0 0}
-
-.strip{display:flex;gap:3px;flex-shrink:0;padding-top:3px}
-.tick{width:13px;height:22px;border-radius:1px;background:var(--rule-strong)}
-.tick.ok{background:var(--signal)}
-.tick.ko{background:var(--fault)}
-
-.tag{font-size:12px;padding:3px 9px;border-radius:2px;flex-shrink:0;white-space:nowrap}
-.tag.ok{background:var(--signal-bg);color:var(--signal)}
-.tag.drift{background:var(--drift-bg);color:var(--drift)}
-.tag.ko{background:var(--fault-bg);color:var(--fault)}
-
-.detail{margin:12px 0 2px;padding:12px 14px;background:var(--paper);border-left:2px solid var(--rule-strong);border-radius:0}
-.detail p{margin:0 0 8px;font-size:13px;color:var(--ink-soft)}
-.detail ul{margin:0;padding-left:18px}
-.detail li{font-size:13.5px;margin-bottom:5px;overflow-wrap:anywhere}
-.detail .out{font-size:13.5px}
-
-.bar-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
-.bar-row:last-child{border-bottom:0}
-.bar-name{width:34%;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{flex:1;height:20px;background:var(--paper);border-radius:2px;overflow:hidden}
-.bar-fill{height:100%;background:var(--signal);display:flex;align-items:center;padding-left:7px}
-.bar-fill span{font-size:11.5px;color:#fff}
-.bar-meta{font-size:12.5px;color:var(--ink-faint);width:112px;text-align:right;flex-shrink:0}
-
-.empty{color:var(--ink-soft);font-size:14px;padding:26px 0}
-.status{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink-soft);padding:18px 0}
-.pulse{width:8px;height:8px;border-radius:50%;background:var(--slate);animation:p 1.3s ease-in-out infinite}
-@keyframes p{0%,100%{opacity:.25}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.pulse{animation:none;opacity:.7}}
-
-.hidden{display:none}
-@media(max-width:640px){
-  .case-head{flex-wrap:wrap}
-  .bar-name{width:100%}
-  .bar-row{flex-wrap:wrap}
-}
+/* archives */
+.track{height:8px;border-radius:999px;background:var(--frost);overflow:hidden;min-width:120px}
+.fill{height:100%;background:var(--ok);border-radius:999px}
+.fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
+.empty{padding:30px 0;color:var(--slate);font-size:15px}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="head-in">
-    <div>
-      <h1>Banc d'essai</h1>
-      <p class="tagline">Un prompt qui marche une fois n'a rien prouvé. Répétez-le, mesurez ce qui change.</p>
-    </div>
+<nav class="nav"><div class="nav-in">
+  <div class="brand"><span class="bolt"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>Prompt Bench</div>
+  <div class="links">
+    <button id="n-essai" aria-current="true">Run</button>
+    <button id="n-arch" aria-current="false">History</button>
+    <button class="btn btn-dark" id="n-new" style="margin-left:8px">New run</button>
   </div>
-  <div class="head-in" style="padding-top:0">
-    <nav role="tablist">
-      <button id="tab-bench" role="tab" aria-selected="true">Essai</button>
-      <button id="tab-hist" role="tab" aria-selected="false">Historique</button>
-    </nav>
-  </div>
-</header>
+</div></nav>
 
-<div class="wrap">
+<div class="wrap"><div class="grid">
 
-<!-- ESSAI -->
-<div id="view-bench">
-
-  <section class="panel">
-    <h2>Le prompt à tester</h2>
-    <p class="hint">Il sera envoyé comme consigne système. Chaque cas de test ci-dessous sera soumis comme message utilisateur.</p>
-    <label class="field" for="nom">Nom de l'essai</label>
-    <input type="text" id="nom" value="Classification de tickets" />
-    <div style="height:14px"></div>
-    <label class="field" for="prompt">Consigne</label>
-    <textarea id="prompt"></textarea>
-    <div class="row-actions">
-      <button class="ghost" id="p-vague">Consigne vague</button>
-      <button class="ghost" id="p-cadree">Consigne cadrée</button>
+  <!-- ===== sidebar ===== -->
+  <aside class="side">
+    <div class="card">
+      <h4>Protocol</h4>
+      <div class="kv"><span class="k">Task</span><span class="v" id="s-tache">—</span></div>
+      <div class="kv"><span class="k">Inputs</span><span class="v" id="s-jeu">—</span></div>
+      <div class="kv"><span class="k">Repetitions</span><span class="v" id="s-rep">—</span></div>
+      <div class="kv"><span class="k">Temperature</span><span class="v" id="s-temp">—</span></div>
+      <div class="kv"><span class="k">Scoring</span><span class="v" id="s-mode">—</span></div>
+      <div id="stamp" class="hidden" style="margin-top:12px"></div>
     </div>
-    <p class="hint" style="margin:10px 0 0">Lancez la même série avec les deux, puis comparez dans l'historique. L'écart mesure ce que rapporte une contrainte de format.</p>
-  </section>
-
-  <section class="panel">
-    <h2>Cas de test</h2>
-    <p class="hint">L'entrée soumise au modèle, et la réponse que vous considérez correcte.</p>
-    <table class="cases">
-      <thead><tr><th class="c-in">Entrée</th><th class="c-out">Réponse attendue</th><th class="c-x"></th></tr></thead>
-      <tbody id="cases"></tbody>
-    </table>
-    <div class="row-actions">
-      <button class="ghost" id="add">Ajouter un cas</button>
-      <button class="ghost" id="load-demo">Charger le jeu d'exemple</button>
+    <div class="card soft">
+      <h4>Scoring methods</h4>
+      <div class="kv"><span class="k">Exact</span><span class="v" style="font-weight:400;color:var(--slate)">Output = expected</span></div>
+      <div class="kv"><span class="k">Judge</span><span class="v" style="font-weight:400;color:var(--slate)">Same meaning</span></div>
+      <div class="kv"><span class="k">Open</span><span class="v" style="font-weight:400;color:var(--slate)">Score /10, no expected</span></div>
     </div>
-  </section>
+  </aside>
 
-  <section class="panel">
-    <h2>Conditions de mesure</h2>
-    <p class="hint">Répéter chaque cas est ce qui révèle l'instabilité. Une seule répétition ne mesure rien.</p>
-    <div class="knobs">
-      <div>
-        <label class="field" for="rep">Répétitions par cas</label>
-        <div class="knob-val mono" id="rep-v">3</div>
-        <input type="range" id="rep" min="1" max="5" step="1" value="3" />
+  <!-- ===== main ===== -->
+  <main>
+
+    <!-- FORM -->
+    <div id="v-form">
+      <div class="hero">
+        <div class="mosaic" id="mosaic"></div>
+        <div class="eyebrow"><span class="lab">New run</span></div>
+        <h1>One prompt, a few inputs, several passes.</h1>
+        <p class="sub">The bench repeats every input, measures what varies, then a reviewer reads the failures and proposes a corrected prompt.</p>
       </div>
-      <div>
-        <label class="field" for="temp">Température</label>
-        <div class="knob-val mono" id="temp-v">1.0</div>
-        <input type="range" id="temp" min="0" max="1" step="0.1" value="1" />
+
+      <div class="card">
+        <div class="f-row">
+          <label class="f" for="nom">Run title</label>
+          <input type="text" id="nom" placeholder="e.g. Support ticket classification" />
+        </div>
+        <div class="f-row">
+          <label class="f" for="prompt">Prompt</label>
+          <textarea id="prompt" placeholder="The prompt under test. It is sent as the system instruction."></textarea>
+          <div class="chips">
+            <button id="p-vague">Example — vague prompt</button>
+            <button id="p-cadree">Example — constrained prompt</button>
+          </div>
+        </div>
+        <div class="f-row">
+          <label class="f">Scoring</label>
+          <div class="toggle" role="group">
+            <button data-mode="exact" aria-pressed="true">Exact</button>
+            <button data-mode="juge" aria-pressed="false">Judge</button>
+            <button data-mode="libre" aria-pressed="false">Open</button>
+          </div>
+          <p class="help" id="help"></p>
+        </div>
       </div>
-      <div>
-        <label class="field" for="mode">Méthode de comparaison</label>
-        <select id="mode">
-          <option value="exact">Correspondance exacte</option>
-          <option value="juge">Jugement par un second modèle</option>
-        </select>
+
+      <div class="card">
+        <div class="eyebrow" style="margin-bottom:10px"><h3 style="margin:0">Test inputs</h3><span class="lab" id="cas-sub"></span></div>
+        <div class="cases" id="cases"></div>
+        <div class="chips">
+          <button id="add">+ Add input</button>
+          <button id="load-demo">Load example set</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:12px">Conditions</h3>
+        <div class="inline">
+          <div><label class="f" for="rep">Repetitions per input</label><input type="number" id="rep" min="1" max="5" value="3" /></div>
+          <div><label class="f" for="temp">Temperature</label><input type="number" id="temp" min="0" max="1" step="0.1" value="1" /></div>
+        </div>
+        <div class="launch">
+          <button class="btn btn-violet" id="run">Run the bench</button>
+          <span class="est" id="est"></span>
+        </div>
+        <div class="err hidden" id="err"></div>
       </div>
     </div>
-    <div class="launch">
-      <button class="run" id="run">Lancer l'essai</button>
-      <span class="est" id="est"></span>
+
+    <!-- RUNNING -->
+    <div id="v-run" class="hidden">
+      <div class="eyebrow"><span class="lab" id="run-no">Running</span><span class="lab mono" id="elapsed"></span></div>
+      <h1 class="md" id="run-title"></h1>
+      <p class="sub">Passes are running on the engine. This page polls the API every three seconds.</p>
+      <div class="card" style="max-width:520px">
+        <ul class="phases">
+          <li id="ph1"><i></i>Sending to the engine</li>
+          <li id="ph2"><i></i>Passes on the model</li>
+          <li id="ph3"><i></i>Scoring the outputs</li>
+          <li id="ph4"><i></i>Reviewer reading the results</li>
+        </ul>
+      </div>
     </div>
-    <div class="err hidden" id="err"></div>
-  </section>
 
-  <div id="running" class="hidden">
-    <section class="panel">
-      <div class="status"><span class="pulse"></span><span id="running-txt">Essai en cours…</span></div>
-    </section>
-  </div>
+    <!-- RESULTS -->
+    <div id="v-res" class="hidden">
+      <div class="eyebrow">
+        <span class="lab" id="r-no"></span>
+        <button class="btn btn-ghost" id="r-rerun">Run again</button>
+      </div>
+      <h1 class="md" id="r-title"></h1>
+      <p class="sub" id="r-sub"></p>
 
-  <div id="results" class="hidden">
-    <section class="panel">
-      <h2 id="res-title">Résultats</h2>
-      <p class="hint" id="res-sub"></p>
-      <div class="metrics" id="metrics"></div>
-      <div id="cases-out"></div>
-    </section>
-  </div>
+      <div class="stats" id="stats"></div>
 
-</div>
+      <div class="card">
+        <table>
+          <thead><tr><th></th><th>Input</th><th class="r">Passes</th><th class="r" id="th-score">Score</th><th class="r">Stability</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
 
-<!-- HISTORIQUE -->
-<div id="view-hist" class="hidden">
-  <section class="panel">
-    <h2>Essais précédents</h2>
-    <p class="hint">Chaque barre est un taux de réussite. Cliquez pour rouvrir un essai.</p>
-    <div id="hist"><div class="empty">Chargement…</div></div>
-  </section>
-</div>
+      <div class="two">
+        <div class="card"><h3>Observation</h3><p class="obs" id="obs"></p></div>
+        <div class="card"><h3 id="lit-h">Disputed cases</h3><ul class="lit" id="lit"></ul></div>
+      </div>
 
-</div>
+      <div class="card corr hidden" id="corr">
+        <div class="eyebrow"><h3 style="margin:0">Reviewer's suggested fix</h3><span class="badge violet" id="conf"></span></div>
+        <ul class="probs" id="probs"></ul>
+        <div class="cols">
+          <div>
+            <div class="term-h"><i></i><i></i><i></i><span>corrected prompt</span></div>
+            <pre class="term" id="pc"></pre>
+          </div>
+          <div><h3>What changes, and why</h3><ul class="chg" id="chg"></ul></div>
+        </div>
+        <div class="acts">
+          <button class="btn btn-violet" id="apply">Apply and run again</button>
+          <button class="btn btn-ghost" id="copy">Copy prompt</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARCHIVES -->
+    <div id="v-arch" class="hidden">
+      <div class="eyebrow"><span class="lab">History</span></div>
+      <h1 class="md">Previous runs</h1>
+      <p class="sub">Click a run to reopen its results and diagnosis.</p>
+      <div class="card">
+        <table>
+          <thead><tr><th>#</th><th>Title</th><th>Scoring</th><th class="r">Pass rate</th><th></th><th class="r">Unstable</th></tr></thead>
+          <tbody id="arch"></tbody>
+        </table>
+        <p class="empty hidden" id="arch-empty">No completed run yet.</p>
+      </div>
+    </div>
+
+  </main>
+</div></div>
 
 <script>
 const API = 'https://mariusrang.app.n8n.cloud/webhook';
+const $ = id => document.getElementById(id);
+const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 const DEMO = [
-  ["Je veux arrêter, ça bug tout le temps","facturation"],
-  ["Le paiement échoue quand je clique sur valider","technique"],
-  ["Facture erronée à cause d'un bug d'affichage","facturation"],
-  ["On est 50 maintenant, il me faut plus de licences et j'ai un souci de connexion","commercial"],
-  ["Votre offre pro inclut le SSO ? on n'arrive pas à le configurer","commercial"],
-  ["Depuis la mise à jour de prix, l'app est lente","technique"],
-  ["Merci pour votre aide hier","commercial"],
-  ["Pourquoi mon prélèvement est passé de 29 à 49 euros","facturation"]
+  ["I want to cancel, it keeps crashing","billing"],
+  ["Payment fails when I click confirm","technical"],
+  ["Wrong invoice because of a display bug","billing"],
+  ["We're 50 people now, I need more seats and I have a login issue","sales"],
+  ["Does the pro plan include SSO? we can't get it configured","sales"],
+  ["Since the price update the app is slow","technical"],
+  ["Thanks for your help yesterday","sales"],
+  ["Why did my charge go from 29 to 49 dollars","billing"]
 ];
-
 const PROMPTS = {
-  vague: {
-    nom: "Consigne vague",
-    texte: "Regarde ce ticket de support client et indique de quelle catégorie il relève."
-  },
-  cadree: {
-    nom: "Consigne cadrée",
-    texte: "Tu classes des tickets de support client.\n\nRéponds par une seule catégorie, en minuscules, sans phrase autour :\nfacturation, technique, ou commercial.\n\nQuand un ticket mélange plusieurs sujets, retiens celui sur lequel le client attend une action, pas celui qu'il mentionne en passant.\nSi rien ne correspond, réponds commercial."
-  }
+  vague:{ nom:"Ambiguous tickets — vague prompt", texte:"Look at this customer support ticket and say which category it belongs to." },
+  cadree:{ nom:"Ambiguous tickets — constrained prompt", texte:"You classify customer support tickets.\n\nAnswer with a single category, lowercase, with no sentence around it:\nbilling, technical, or sales.\n\nWhen a ticket mixes several topics, keep the one the customer expects an action on, not the one mentioned in passing.\nIf nothing fits, answer sales." }
 };
+const HELP = {
+  exact:"The output must match the expected answer word for word. Free and instant; \"Technical.\" where you expected \"technical\" counts as a failure.",
+  juge:"A second model decides whether the output means the same as the expected answer, even if worded differently. Needed as soon as the output is prose.",
+  libre:"No expected answer. The judge scores each output out of 10 against the prompt itself: format respected, request addressed, nothing invented."
+};
+const MODE_LABEL = { exact:'Exact', juge:'Judge', libre:'Open' };
 
-const $ = id => document.getElementById(id);
-let poll = null;
+let mode='exact', poll=null, timer=null, t0=0, current=null;
 
-/* ---------- cas de test ---------- */
-function caseRow(entree='', attendu=''){
-  const tr = document.createElement('tr');
-  tr.innerHTML =
-    '<td class="g"><input type="text" class="in" /></td>' +
-    '<td class="g"><input type="text" class="out" /></td>' +
-    '<td><button class="mini" type="button">Retirer</button></td>';
-  tr.querySelector('.in').value = entree;
-  tr.querySelector('.out').value = attendu;
-  tr.querySelector('button').onclick = () => { tr.remove(); estimate(); };
-  return tr;
+/* mosaic ornament */
+(function(){ const cols=['#5e4cff','#c8ccf3','#dfdbff','transparent','transparent']; let h='';
+  for(let i=0;i<60;i++){ h+='<i style="background:'+cols[Math.floor(Math.random()*cols.length)]+'"></i>'; } $('mosaic').innerHTML=h; })();
+
+/* ---------- sidebar ---------- */
+function sideFromForm(){
+  const n=readCases().length;
+  $('s-tache').textContent=$('nom').value.trim()||'—';
+  $('s-jeu').textContent=n?n+' input'+(n>1?'s':''):'—';
+  $('s-rep').textContent=$('rep').value+' per input';
+  $('s-temp').textContent=Number($('temp').value).toFixed(1);
+  $('s-mode').textContent=MODE_LABEL[mode];
+  $('stamp').classList.add('hidden');
 }
-function readCases(){
-  return [...$('cases').querySelectorAll('tr')].map(tr => ({
-    entree: tr.querySelector('.in').value.trim(),
-    attendu: tr.querySelector('.out').value.trim()
-  })).filter(c => c.entree);
+function sideFromCampaign(c, ok){
+  $('s-tache').textContent=c.nom;
+  $('s-jeu').textContent=c.nbCas+' input'+(c.nbCas>1?'s':'');
+  $('s-rep').textContent=c.repetitions+' per input';
+  $('s-temp').textContent=c.temperature!=null?Number(c.temperature).toFixed(1):'—';
+  $('s-mode').textContent=MODE_LABEL[c.mode]||c.mode;
+  const d=c.date?new Date(c.date):new Date();
+  const ds=d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  $('stamp').innerHTML='<span class="badge '+(ok?'ok':'bad')+'"><i></i>'+(ok?'Validated':'Needs work')+' · '+ds+'</span>';
+  $('stamp').classList.remove('hidden');
 }
-function loadDemo(){
-  $('cases').innerHTML = '';
-  DEMO.forEach(([a,b]) => $('cases').appendChild(caseRow(a,b)));
+
+/* ---------- form ---------- */
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('.toggle button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m)));
+  $('help').textContent=HELP[m];
+  document.querySelectorAll('.cr').forEach(r=>r.classList.toggle('libre',m==='libre'));
+  $('cas-sub').textContent=m==='libre'?'input only':'input · expected answer';
   estimate();
 }
+function caseRow(entree='',attendu=''){
+  const d=document.createElement('div'); d.className='cr'+(mode==='libre'?' libre':'');
+  d.innerHTML='<span class="l"></span><input type="text" class="in" placeholder="Input sent to the model" /><input type="text" class="out" placeholder="Expected answer" /><button class="x" type="button" aria-label="Remove">×</button>';
+  d.querySelector('.in').value=entree; d.querySelector('.out').value=attendu;
+  d.querySelector('.x').onclick=()=>{ d.remove(); letters(); estimate(); };
+  d.querySelectorAll('input').forEach(i=>i.oninput=estimate);
+  return d;
+}
+function letters(){ [...$('cases').querySelectorAll('.cr .l')].forEach((s,i)=>s.textContent=L[i]||i+1); }
+function readCases(){ return [...$('cases').querySelectorAll('.cr')].map(r=>({entree:r.querySelector('.in').value.trim(),attendu:r.querySelector('.out').value.trim()})).filter(c=>c.entree); }
+function loadDemo(){ $('cases').innerHTML=''; DEMO.forEach(([a,b])=>$('cases').appendChild(caseRow(a,b))); letters(); estimate(); }
 function estimate(){
-  const n = readCases().length * Number($('rep').value);
-  $('est').textContent = n ? n + ' appels au modèle, environ ' + Math.max(1, Math.round(n*1.3/60)) + ' min' : 'Ajoutez au moins un cas';
-  $('run').disabled = n === 0;
+  const n=readCases().length*Number($('rep').value||1); const k=mode==='exact'?1.2:2.4;
+  $('est').textContent=n?n+' pass'+(n>1?'es':'')+(mode!=='exact'?' + '+n+' judgements':'')+' · about '+Math.max(1,Math.round(n*k/60))+' min':'Add at least one input';
+  $('run').disabled=n===0; sideFromForm();
+}
+function setPrompt(k){ $('prompt').value=PROMPTS[k].texte; $('nom').value=PROMPTS[k].nom; sideFromForm(); }
+
+/* ---------- views ---------- */
+function view(w){
+  ['form','run','res','arch'].forEach(v=>$('v-'+v).classList.toggle('hidden',v!==w));
+  $('n-essai').setAttribute('aria-current',String(w==='res'||w==='run'));
+  $('n-arch').setAttribute('aria-current',String(w==='arch'));
+  if(w==='form') sideFromForm(); if(w==='arch') archives();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
-/* ---------- lancement ---------- */
-async function run(){
-  const cas = readCases();
-  const prompt = $('prompt').value.trim();
+/* ---------- run ---------- */
+async function run(customPrompt, customNom){
+  const cas=readCases(); const prompt=(customPrompt??$('prompt').value).trim(); const nom=(customNom??$('nom').value).trim()||'Untitled run';
   $('err').classList.add('hidden');
-
-  if(!prompt){ return fail("Écrivez une consigne avant de lancer."); }
-  if(!cas.length){ return fail("Ajoutez au moins un cas de test."); }
-
-  $('run').disabled = true;
-  $('results').classList.add('hidden');
-  $('running').classList.remove('hidden');
-  $('running-txt').textContent = 'Envoi de l\'essai…';
-
+  if(!prompt) return fail("Write a prompt before running.");
+  if(!cas.length) return fail("Add at least one input.");
+  if(mode!=='libre'&&cas.some(c=>!c.attendu)) return fail("With "+MODE_LABEL[mode]+" scoring, every input needs an expected answer. Switch to Open to test without one.");
+  view('run'); $('run-title').textContent=nom; $('run-no').textContent='Running'; phase(1); t0=Date.now();
+  clearInterval(timer); timer=setInterval(()=>$('elapsed').textContent=Math.round((Date.now()-t0)/1000)+' s',1000);
   try{
-    const r = await fetch(API + '/eval-run', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        nom: $('nom').value.trim() || 'Essai sans nom',
-        prompt,
-        mode: $('mode').value,
-        repetitions: Number($('rep').value),
-        temperature: Number($('temp').value),
-        cas
-      })
-    });
-    const data = await r.json();
-    if(!r.ok || !data.campagneId){
-      throw new Error(data.erreur || 'Le moteur a refusé la requête.');
-    }
-    $('running-txt').textContent = data.nbAppels + ' appels lancés. Les résultats arrivent au fur et à mesure…';
-    watch(data.campagneId);
-  }catch(e){
-    $('running').classList.add('hidden');
-    fail("Impossible de joindre le moteur. " + e.message);
-  }
+    const r=await fetch(API+'/eval-run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom,prompt,mode,repetitions:Number($('rep').value),temperature:Number($('temp').value),cas})});
+    const d=await r.json(); if(!r.ok||!d.campagneId) throw new Error(d.erreur||'the engine rejected the request.');
+    $('run-no').textContent='Run #'+shortId(d.campagneId); phase(2); watch(d.campagneId,d.nbAppels);
+  }catch(e){ view('form'); fail("Could not reach the engine — "+e.message); }
 }
-function fail(msg){
-  $('err').textContent = msg;
-  $('err').classList.remove('hidden');
-  $('run').disabled = false;
+function fail(m){ $('err').textContent=m; $('err').classList.remove('hidden'); clearInterval(timer); }
+function phase(n){ for(let i=1;i<=4;i++) $('ph'+i).className=i<n?'done':i===n?'on':''; }
+function shortId(id){ return String(id).slice(-4).toUpperCase(); }
+function watch(id,nb){
+  clearInterval(poll); let tries=0; const seuil=nb*(mode==='exact'?1.2:2.4);
+  poll=setInterval(async()=>{ tries++; const s=(Date.now()-t0)/1000;
+    if(s>seuil&&s<seuil+25) phase(3); else if(s>=seuil+25) phase(4);
+    if(tries>160){ clearInterval(poll); view('form'); fail("This run is taking unusually long. Check the Executions tab in n8n."); return; }
+    try{ const r=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(id)+'&t='+Date.now()); const d=await r.json();
+      if(d.type==='campagne'){ clearInterval(poll); clearInterval(timer); render(d); } }catch(e){}
+  },3000);
 }
 
-/* ---------- suivi ---------- */
-function watch(id){
-  clearInterval(poll);
-  let tries = 0;
-  poll = setInterval(async () => {
-    tries++;
-    if(tries > 120){ clearInterval(poll); $('running').classList.add('hidden'); fail("L'essai prend anormalement longtemps. Regardez l'onglet Executions dans n8n."); return; }
-    try{
-      const r = await fetch(API + '/eval-results?campagneId=' + encodeURIComponent(id) + '&t=' + Date.now());
-      const d = await r.json();
-      if(d.type === 'campagne'){
-        clearInterval(poll);
-        $('running').classList.add('hidden');
-        $('run').disabled = false;
-        render(d);
-      }
-    }catch(e){ /* on retente au tick suivant */ }
-  }, 3000);
-}
-
-/* ---------- rendu ---------- */
+/* ---------- render ---------- */
+function tone(v){ return v>=90?'ok':v>=60?'warn':'bad'; }
 function render(d){
-  const c = d.campagne;
-  const instables = d.cas.filter(x => x.statut === 'instable').length;
-  const echoues = d.cas.filter(x => x.statut === 'echec').length;
+  current=d; const c=d.campagne;
+  const byCase={}; d.detail.forEach(x=>(byCase[x.casId]=byCase[x.casId]||[]).push(x));
+  const hasScore=c.scoreMoyen!=null; const ok=c.tauxReussite>=90;
+  const inst=d.cas.filter(x=>x.statut==='instable').length, ech=d.cas.filter(x=>x.statut==='echec').length;
 
-  $('res-title').textContent = c.nom;
-  $('res-sub').textContent = c.nbCas + ' cas · ' + c.repetitions + ' répétitions · température ' +
-    c.temperature + ' · comparaison ' + (c.mode === 'juge' ? 'par modèle juge' : 'exacte');
+  $('r-no').textContent='Run #'+shortId(c.campagneId);
+  $('r-title').textContent=c.nom;
+  $('r-sub').textContent=c.nbCas+' inputs · '+c.repetitions+' repetitions · temperature '+c.temperature+' · '+(MODE_LABEL[c.mode]||c.mode).toLowerCase()+' scoring';
+  $('th-score').style.display=hasScore?'':'none';
+  sideFromCampaign(c,ok);
 
-  $('metrics').innerHTML = [
-    card('Taux de réussite', c.tauxReussite + '<small>%</small>'),
-    card('Cas instables', instables),
-    card('Cas toujours faux', echoues),
-    card('Appels effectués', c.nbAppels)
-  ].join('');
+  let st=stat('Pass rate',c.tauxReussite+'<small>%</small>',tone(c.tauxReussite));
+  if(hasScore) st+=stat('Average score',c.scoreMoyen+'<small>/10</small>',tone(c.scoreMoyen*10));
+  st+=stat('Unstable cases',inst,inst?'warn':'')+stat('Always wrong',ech,ech?'bad':'')+stat('Passes',c.nbAppels,'');
+  $('stats').innerHTML=st;
 
-  const byCase = {};
-  d.detail.forEach(x => { (byCase[x.casId] = byCase[x.casId] || []).push(x); });
-
-  $('cases-out').innerHTML = d.cas.map(cas => {
-    const runs = (byCase[cas.casId] || []).sort((a,b) => a.repetition - b.repetition);
-    const strip = runs.map(r => '<div class="tick ' + (r.reussi ? 'ok':'ko') + '"></div>').join('');
-    const tag = cas.statut === 'reussi' ? '<span class="tag ok">stable</span>'
-              : cas.statut === 'instable' ? '<span class="tag drift">instable</span>'
-              : '<span class="tag ko">échec</span>';
-    const sorties = cas.sortiesDistinctes.length > 1
-      ? '<p>' + cas.sortiesDistinctes.length + ' réponses différentes pour la même entrée :</p><ul>' +
-        cas.sortiesDistinctes.map(s => '<li class="mono out">' + esc(s || '(vide)') + '</li>').join('') + '</ul>'
-      : '<p>Réponse constante :</p><ul><li class="mono out">' + esc(cas.exemple || '(vide)') + '</li></ul>';
-    const just = runs.filter(r => r.justification).slice(0,3)
-      .map(r => '<li>' + esc(r.justification) + '</li>').join('');
-
-    return '<div class="case">' +
-      '<div class="case-head" tabindex="0" role="button" aria-expanded="false">' +
-        '<div class="case-body">' +
-          '<p class="case-in">' + esc(cas.entree) + '</p>' +
-          '<p class="case-meta">attendu <span class="mono">' + esc(cas.attendu) + '</span> · ' +
-             cas.reussites + '/' + cas.total + '</p>' +
-        '</div>' + tag +
-        '<div class="strip">' + strip + '</div>' +
-      '</div>' +
-      '<div class="detail hidden">' + sorties +
-        (just ? '<p>Verdicts :</p><ul>' + just + '</ul>' : '') +
-      '</div></div>';
+  $('rows').innerHTML=d.cas.map((cas,i)=>{
+    const runs=(byCase[cas.casId]||[]).sort((a,b)=>a.repetition-b.repetition);
+    const strip='<span class="strip">'+runs.map(r=>'<i class="'+(r.reussi?'ok':'ko')+'" title="pass '+r.repetition+(r.score!=null?' · '+r.score+'/10':'')+'"></i>').join('')+'</span>';
+    const badge=cas.statut==='reussi'?'<span class="badge ok"><i></i>stable</span>':cas.statut==='instable'?'<span class="badge warn"><i></i>'+cas.reussites+' ≠ '+cas.total+'</span>':'<span class="badge bad"><i></i>failed</span>';
+    const outs=cas.sortiesDistinctes.length>1?'<span class="lab">'+cas.sortiesDistinctes.length+' different outputs for the same input</span><ul>'+cas.sortiesDistinctes.map(s=>'<li class="mono">'+esc(s||'(empty)')+'</li>').join('')+'</ul>':'<span class="lab">Constant output</span><ul><li class="mono">'+esc(cas.exemple||'(empty)')+'</li></ul>';
+    const vers=runs.filter(r=>r.justification).map(r=>'<li>'+(r.score!=null?'<span class="sc mono">'+r.score+'/10</span>':'')+esc(r.justification)+'</li>').join('');
+    return '<tr class="row" data-i="'+i+'"><td class="l">'+(L[i]||i+1)+'</td>'+
+      '<td class="q">'+esc(cas.entree)+(cas.attendu?'<div class="att"><b>expected</b> · '+esc(cas.attendu)+'</div>':'')+'</td>'+
+      '<td class="r">'+cas.reussites+'/'+cas.total+strip+'</td>'+
+      (hasScore?'<td class="r" style="color:var(--'+(cas.scoreMoyen==null?'steel':cas.scoreMoyen>=8?'ok':cas.scoreMoyen>=5?'warn':'bad')+')">'+(cas.scoreMoyen!=null?cas.scoreMoyen:'—')+'</td>':'')+
+      '<td class="r">'+badge+'</td></tr>'+
+      '<tr class="det hidden"><td colspan="5">'+outs+(vers?'<span class="lab">Verdicts</span><ul>'+vers+'</ul>':'')+'</td></tr>';
   }).join('');
+  [...$('rows').querySelectorAll('tr.row')].forEach(tr=>tr.onclick=()=>{ const det=tr.nextElementSibling; const open=det.classList.toggle('hidden'); tr.classList.toggle('open',!open); });
 
-  [...$('cases-out').querySelectorAll('.case-head')].forEach(h => {
-    const toggle = () => {
-      const d = h.nextElementSibling;
-      const open = d.classList.toggle('hidden');
-      h.setAttribute('aria-expanded', String(!open));
-    };
-    h.onclick = toggle;
-    h.onkeydown = e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } };
-  });
+  $('obs').textContent=c.diagnostic||(ok?'The prompt holds on this input set. No case diverges between passes.':'The reviewer did not return an observation for this run.');
+  const lit=d.cas.filter(x=>x.statut!=='reussi');
+  $('lit-h').textContent='Disputed cases · '+lit.length;
+  $('lit').innerHTML=lit.length?lit.map(x=>{const i=d.cas.indexOf(x);return '<li><span><span class="n">'+(L[i]||i+1)+'</span>'+esc(tronc(x.entree,56))+'</span><span class="badge '+(x.statut==='instable'?'warn':'bad')+'">'+(x.statut==='instable'?x.reussites+' ≠ '+x.total:'0 / '+x.total)+'</span></li>';}).join(''):'<li><span style="color:var(--steel)">None.</span></li>';
 
-  $('results').classList.remove('hidden');
-  $('results').scrollIntoView({behavior:'smooth', block:'start'});
+  if(c.promptCorrige){
+    $('conf').textContent=c.confianceAnalyse?'confidence '+c.confianceAnalyse:'reviewer';
+    $('probs').innerHTML=(c.problemes||[]).map(p=>'<li><span class="n">'+esc(caseLetter(d,p.cas))+'</span>'+esc(p.observation||'')+(p.cause?'<span class="why">'+esc(p.cause)+'</span>':'')+'</li>').join('');
+    $('pc').textContent=c.promptCorrige;
+    $('chg').innerHTML=(c.changements||[]).map(x=>'<li><b>'+esc(x.quoi||'')+'</b><span>'+esc(x.pourquoi||'')+'</span></li>').join('')||'<li><span>No change proposed.</span></li>';
+    $('apply').onclick=()=>{ $('prompt').value=c.promptCorrige; const base=c.nom.replace(/\s·\sv\d+$/,''); const m=c.nom.match(/v(\d+)$/); $('nom').value=base+' · v'+(m?Number(m[1])+1:2); if(c.mode) setMode(c.mode); run(c.promptCorrige,$('nom').value); };
+    $('copy').onclick=()=>{ navigator.clipboard.writeText(c.promptCorrige); $('copy').textContent='Copied'; setTimeout(()=>$('copy').textContent='Copy prompt',1500); };
+    $('corr').classList.remove('hidden');
+  } else $('corr').classList.add('hidden');
+
+  $('r-rerun').onclick=()=>{ $('prompt').value=c.prompt||$('prompt').value; $('nom').value=c.nom; if(c.mode) setMode(c.mode); run(c.prompt,c.nom); };
+  view('res');
 }
-function card(k,v){ return '<div class="metric"><div class="k">'+k+'</div><div class="v mono">'+v+'</div></div>'; }
-function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+function stat(k,v,t){ return '<div class="stat '+t+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+function caseLetter(d,casId){ const i=d.cas.findIndex(x=>x.casId===casId); return i>=0?(L[i]||i+1):(casId||''); }
+function tronc(s,n){ s=String(s==null?'':s); return s.length>n?s.slice(0,n-1)+'…':s; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
-/* ---------- historique ---------- */
-async function history(){
-  $('hist').innerHTML = '<div class="empty">Chargement…</div>';
+/* ---------- archives ---------- */
+async function archives(){
+  $('arch').innerHTML=''; $('arch-empty').classList.add('hidden');
   try{
-    const r = await fetch(API + '/eval-results?t=' + Date.now());
-    const d = await r.json();
-    const done = (d.campagnes || []).filter(c => c.statut === 'termine' && c.tauxReussite != null);
-    if(!done.length){ $('hist').innerHTML = '<div class="empty">Aucun essai terminé pour l\'instant.</div>'; return; }
-    $('hist').innerHTML = done.map(c =>
-      '<div class="bar-row" data-id="' + c.campagneId + '">' +
-        '<div class="bar-name">' + esc(c.nom) + '</div>' +
-        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(c.tauxReussite,8) + '%">' +
-          '<span class="mono">' + c.tauxReussite + '%</span></div></div>' +
-        '<div class="bar-meta mono">' + (c.casInstables ?? 0) + ' instables</div>' +
-      '</div>').join('');
-    [...$('hist').querySelectorAll('.bar-row')].forEach(row => {
-      row.onclick = async () => {
-        const r2 = await fetch(API + '/eval-results?campagneId=' + encodeURIComponent(row.dataset.id) + '&t=' + Date.now());
-        const d2 = await r2.json();
-        if(d2.type === 'campagne'){ show('bench'); render(d2); }
-      };
-    });
-  }catch(e){
-    $('hist').innerHTML = '<div class="empty">L\'API de lecture ne répond pas. Vérifiez que le workflow est publié.</div>';
-  }
+    const r=await fetch(API+'/eval-results?t='+Date.now()); const d=await r.json();
+    const done=(d.campagnes||[]).filter(c=>c.statut==='termine'&&c.tauxReussite!=null);
+    if(!done.length){ $('arch-empty').classList.remove('hidden'); return; }
+    $('arch').innerHTML=done.map(c=>'<tr class="row" data-id="'+c.campagneId+'"><td class="l">'+shortId(c.campagneId)+'</td><td class="q">'+esc(c.nom)+'</td><td><span class="badge">'+esc(MODE_LABEL[c.mode]||c.mode)+'</span></td>'+
+      '<td class="r" style="font-weight:500">'+c.tauxReussite+' %'+(c.scoreMoyen!=null?' <span style="color:var(--steel);font-weight:400">· '+c.scoreMoyen+'/10</span>':'')+'</td>'+
+      '<td><div class="track"><div class="fill '+tone(c.tauxReussite)+'" style="width:'+c.tauxReussite+'%"></div></div></td>'+
+      '<td class="r">'+(c.casInstables!=null?(c.casInstables?'<span class="badge warn">'+c.casInstables+'</span>':'0'):'—')+'</td></tr>').join('');
+    [...$('arch').querySelectorAll('tr')].forEach(tr=>tr.onclick=async()=>{ const r2=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(tr.dataset.id)+'&t='+Date.now()); const d2=await r2.json(); if(d2.type==='campagne') render(d2); });
+  }catch(e){ $('arch-empty').textContent="The read API is not responding. Check that the workflow is published."; $('arch-empty').classList.remove('hidden'); }
 }
 
-/* ---------- onglets ---------- */
-function show(which){
-  const bench = which === 'bench';
-  $('view-bench').classList.toggle('hidden', !bench);
-  $('view-hist').classList.toggle('hidden', bench);
-  $('tab-bench').setAttribute('aria-selected', String(bench));
-  $('tab-hist').setAttribute('aria-selected', String(!bench));
-  if(!bench) history();
-}
-
-/* ---------- init ---------- */
-function setPrompt(key){
-  $('prompt').value = PROMPTS[key].texte;
-  $('nom').value = 'Tickets ambigus — ' + PROMPTS[key].nom;
-}
-$('p-vague').onclick = () => setPrompt('vague');
-$('p-cadree').onclick = () => setPrompt('cadree');
-$('add').onclick = () => { $('cases').appendChild(caseRow()); estimate(); };
-$('load-demo').onclick = loadDemo;
-$('run').onclick = run;
-$('rep').oninput = e => { $('rep-v').textContent = e.target.value; estimate(); };
-$('temp').oninput = e => { $('temp-v').textContent = Number(e.target.value).toFixed(1); };
-$('tab-bench').onclick = () => show('bench');
-$('tab-hist').onclick = () => show('hist');
-setPrompt('cadree');
-loadDemo();
+/* ---------- wiring ---------- */
+document.querySelectorAll('.toggle button').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+$('p-vague').onclick=()=>setPrompt('vague'); $('p-cadree').onclick=()=>setPrompt('cadree');
+$('add').onclick=()=>{ $('cases').appendChild(caseRow()); letters(); estimate(); };
+$('load-demo').onclick=loadDemo; $('run').onclick=()=>run();
+$('rep').oninput=estimate; $('temp').oninput=estimate; $('nom').oninput=sideFromForm;
+$('n-essai').onclick=()=>view(current?'res':'form'); $('n-arch').onclick=()=>view('arch'); $('n-new').onclick=()=>view('form');
+setMode('exact'); setPrompt('cadree'); loadDemo(); view('form');
 </script>
 </body>
 </html>
