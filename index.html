@@ -364,17 +364,17 @@ const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 const SCENARIOS = {
   letter:{
-    nom:"Cover letter — the prompt I actually use",
+    nom:"Cover letter — my current prompt",
     mode:'libre',
     temp:1,
     rep:3,
-    texte:"Write a cover letter for this internship offer. I'm a business school student at ESSEC and I want to work in AI.",
+    texte:"You write cover letters for my internship applications. The offer is given as input.\n\nABOUT ME\nFinal-year student at ESSEC Business School. Targeting pre-sales and AI solutions roles.\nProjects: a prompt evaluation bench (n8n backend, LLM-as-judge scoring, public repo and live demo); an MCP server connecting an internal tool to Claude; Alteryx Server automation for a data team.\nLanguages: French native, English fluent.\nTools: n8n, Alteryx, SQL, basic Python.\n\nRULES\n1. Between 220 and 260 words.\n2. Four paragraphs: why this company, what I bring, one concrete proof taken from the projects above, a closing line proposing a call.\n3. Write in the language the offer is written in.\n4. Never claim a skill or an experience that is not listed above. If the offer requires something I do not have, say how I would ramp up instead of implying I already have it.\n5. No filler opening such as \"I am writing to apply\". Open on something specific to the company or the role.\n6. Plain, direct tone. No superlatives, no enthusiasm padding.",
     cas:[
       ["Sales Engineer intern, French AI scale-up, 6 months from January. You demo the platform to enterprise prospects and answer their technical questions.",""],
       ["AI Solutions Consultant intern, consulting firm. Client-facing, fluent English required, frequent travel. You advise large accounts on GenAI adoption.",""],
-      ["Pre-sales apprentice, B2B SaaS vendor, 12 months. You support account executives on technical qualification and proof-of-concept builds.",""],
-      ["Data analyst intern, retail bank. Strong SQL and statistics required, quantitative profile preferred, 6 months.",""],
-      ["Growth marketing intern, 8-person startup. You will do a bit of everything: content, outbound, analytics. Autonomy expected from day one.",""],
+      ["Alternance avant-vente, editeur SaaS B2B, 12 mois a partir de septembre. Vous accompagnez les commerciaux sur la qualification technique et les preuves de concept.",""],
+      ["Data analyst intern, retail bank. Requires strong SQL, solid statistics and a quantitative background. You will build risk dashboards.",""],
+      ["Growth marketing intern, 8-person startup. Content, outbound and analytics. Full autonomy expected from day one, no onboarding.",""],
       ["Intern at a workflow automation vendor. You build customer-facing demos and write integration guides. Experience with n8n or Zapier is a plus.",""]
     ]
   },
