@@ -157,6 +157,7 @@ tr.det td{background:var(--cloud);padding:12px 16px 14px 40px;border-bottom:1px 
 tr.det .lab{display:block;font-size:12px;color:var(--steel);margin:8px 0 6px}
 tr.det ul{margin:0;padding:0;list-style:none}
 tr.det li{padding:5px 0;font-size:13px;overflow-wrap:anywhere;color:var(--graphite)}
+tr.det li.out{white-space:pre-wrap;background:var(--canvas);border:1px solid var(--ash);border-radius:8px;padding:10px 12px;margin-bottom:8px;max-height:230px;overflow:auto;line-height:1.55}
 tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
 @media(max-width:800px){.two{grid-template-columns:1fr}}
@@ -508,7 +509,8 @@ function render(d){
   current=d; const c=d.campagne;
   const byCase={}; d.detail.forEach(x=>(byCase[x.casId]=byCase[x.casId]||[]).push(x));
   const hasScore=c.scoreMoyen!=null; const ok=c.tauxReussite>=90;
-  const inst=d.cas.filter(x=>x.statut==='instable').length, ech=d.cas.filter(x=>x.statut==='echec').length;
+  const spread=x=>(x.scoreMin!=null&&x.scoreMax!=null)?x.scoreMax-x.scoreMin:0;
+  const inst=d.cas.filter(x=>x.statut==='instable'||spread(x)>=2).length, ech=d.cas.filter(x=>x.statut==='echec').length;
 
   $('r-no').textContent='Run #'+shortId(c.campagneId);
   $('r-title').textContent=c.nom;
@@ -524,8 +526,15 @@ function render(d){
   $('rows').innerHTML=(c.resultatsManquants?'<tr><td colspan="5" style="padding:14px 0"><div class="err">The campaign finished but no per-case rows were written. This usually means a column is missing in the <span class="mono">resultats</span> sheet (check that it has a <span class="mono">Score</span> column), or the workflow was not republished after the last change.</div></td></tr>':'')+d.cas.map((cas,i)=>{
     const runs=(byCase[cas.casId]||[]).sort((a,b)=>a.repetition-b.repetition);
     const strip='<span class="strip">'+runs.map(r=>'<i class="'+(r.reussi?'ok':'ko')+'" title="pass '+r.repetition+(r.score!=null?' · '+r.score+'/10':'')+'"></i>').join('')+'</span>';
-    const badge=cas.statut==='reussi'?'<span class="badge ok"><i></i>stable</span>':cas.statut==='instable'?'<span class="badge warn"><i></i>'+cas.reussites+' ≠ '+cas.total+'</span>':'<span class="badge bad"><i></i>failed</span>';
-    const outs=cas.sortiesDistinctes.length>1?'<span class="lab">'+cas.sortiesDistinctes.length+' different outputs for the same input</span><ul>'+cas.sortiesDistinctes.map(s=>'<li class="mono">'+esc(s||'(empty)')+'</li>').join('')+'</ul>':'<span class="lab">Constant output</span><ul><li class="mono">'+esc(cas.exemple||'(empty)')+'</li></ul>';
+    const sp=spread(cas);
+    const badge=cas.statut==='echec'?'<span class="badge bad"><i></i>failed</span>'
+      :cas.statut==='instable'?'<span class="badge warn"><i></i>'+cas.reussites+' of '+cas.total+' passed</span>'
+      :sp>=2?'<span class="badge warn"><i></i>varies '+cas.scoreMin+'–'+cas.scoreMax+'</span>'
+      :'<span class="badge ok"><i></i>consistent</span>';
+    const cls=s=>String(s||'').length>120?'out':'mono';
+    const outs=cas.sortiesDistinctes.length>1
+      ?'<span class="lab">'+cas.sortiesDistinctes.length+' different outputs for the same input'+(sp>=2?' · scored '+(cas.scores||[]).join(', '):'')+'</span><ul>'+cas.sortiesDistinctes.map(s=>'<li class="'+cls(s)+'">'+esc(s||'(empty)')+'</li>').join('')+'</ul>'
+      :'<span class="lab">Same output every time</span><ul><li class="'+cls(cas.exemple)+'">'+esc(cas.exemple||'(empty)')+'</li></ul>';
     const vers=runs.filter(r=>r.justification).map(r=>'<li>'+(r.score!=null?'<span class="sc mono">'+r.score+'/10</span>':'')+esc(r.justification)+'</li>').join('');
     return '<tr class="row" data-i="'+i+'"><td class="l">'+(L[i]||i+1)+'</td>'+
       '<td class="q">'+esc(cas.entree)+(cas.attendu?'<div class="att"><b>expected</b> · '+esc(cas.attendu)+'</div>':'')+'</td>'+
