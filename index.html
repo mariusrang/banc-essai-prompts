@@ -99,6 +99,7 @@ input[type=number]{width:84px}
 .chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .chips button{background:var(--cloud);border:0;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:500;color:var(--graphite);cursor:pointer}
 .chips button:hover{background:var(--frost)}
+.chips button[aria-pressed="true"]{background:var(--lilac);color:var(--violet)}
 .toggle{display:inline-flex;background:var(--cloud);border-radius:999px;padding:3px;gap:2px}
 .toggle button{background:none;border:1px solid transparent;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;color:var(--slate);cursor:pointer}
 .toggle button[aria-pressed="true"]{background:var(--canvas);color:var(--graphite);border-color:var(--ash);box-shadow:rgba(39,40,53,.08) 0 2px 2px -1px}
@@ -245,9 +246,10 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
           <label class="f" for="prompt">Prompt</label>
           <textarea id="prompt" placeholder="The prompt under test. It is sent as the system instruction."></textarea>
           <div class="chips">
-            <button id="p-vague">Example — vague prompt</button>
-            <button id="p-cadree">Example — constrained prompt</button>
+            <button data-scen="letter" aria-pressed="true">Cover letters</button>
+            <button data-scen="tickets" aria-pressed="false">Ticket classification</button>
           </div>
+          <p class="help">Loading a scenario replaces the prompt, the inputs and the conditions.</p>
         </div>
         <div class="f-row">
           <label class="f">Scoring</label>
@@ -265,7 +267,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
         <div class="cases" id="cases"></div>
         <div class="chips">
           <button id="add">+ Add input</button>
-          <button id="load-demo">Load example set</button>
+          <button id="load-demo">Reset to the scenario inputs</button>
         </div>
       </div>
 
@@ -360,20 +362,41 @@ const API = 'https://mariusrang.app.n8n.cloud/webhook';
 const $ = id => document.getElementById(id);
 const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-const DEMO = [
-  ["I want to cancel, it keeps crashing","billing"],
-  ["Payment fails when I click confirm","technical"],
-  ["Wrong invoice because of a display bug","billing"],
-  ["We're 50 people now, I need more seats and I have a login issue","sales"],
-  ["Does the pro plan include SSO? we can't get it configured","sales"],
-  ["Since the price update the app is slow","technical"],
-  ["Thanks for your help yesterday","sales"],
-  ["Why did my charge go from 29 to 49 dollars","billing"]
-];
-const PROMPTS = {
-  vague:{ nom:"Ambiguous tickets — vague prompt", texte:"Look at this customer support ticket and say which category it belongs to." },
-  cadree:{ nom:"Ambiguous tickets — constrained prompt", texte:"You classify customer support tickets.\n\nAnswer with a single category, lowercase, with no sentence around it:\nbilling, technical, or sales.\n\nWhen a ticket mixes several topics, keep the one the customer expects an action on, not the one mentioned in passing.\nIf nothing fits, answer sales." }
+const SCENARIOS = {
+  letter:{
+    nom:"Cover letter — the prompt I actually use",
+    mode:'libre',
+    temp:1,
+    rep:3,
+    texte:"Write a cover letter for this internship offer. I'm a business school student at ESSEC and I want to work in AI.",
+    cas:[
+      ["Sales Engineer intern, French AI scale-up, 6 months from January. You demo the platform to enterprise prospects and answer their technical questions.",""],
+      ["AI Solutions Consultant intern, consulting firm. Client-facing, fluent English required, frequent travel. You advise large accounts on GenAI adoption.",""],
+      ["Pre-sales apprentice, B2B SaaS vendor, 12 months. You support account executives on technical qualification and proof-of-concept builds.",""],
+      ["Data analyst intern, retail bank. Strong SQL and statistics required, quantitative profile preferred, 6 months.",""],
+      ["Growth marketing intern, 8-person startup. You will do a bit of everything: content, outbound, analytics. Autonomy expected from day one.",""],
+      ["Intern at a workflow automation vendor. You build customer-facing demos and write integration guides. Experience with n8n or Zapier is a plus.",""]
+    ]
+  },
+  tickets:{
+    nom:"Ticket classification — constrained prompt",
+    mode:'exact',
+    temp:1,
+    rep:3,
+    texte:"You classify customer support tickets.\n\nAnswer with a single category, lowercase, with no sentence around it:\nbilling, technical, or sales.\n\nWhen a ticket mixes several topics, keep the one the customer expects an action on, not the one mentioned in passing.\nIf nothing fits, answer sales.",
+    cas:[
+      ["I want to cancel, it keeps crashing","billing"],
+      ["Payment fails when I click confirm","technical"],
+      ["Wrong invoice because of a display bug","billing"],
+      ["We're 50 people now, I need more seats and I have a login issue","sales"],
+      ["Does the pro plan include SSO? we can't get it configured","sales"],
+      ["Since the price update the app is slow","technical"],
+      ["Thanks for your help yesterday","sales"],
+      ["Why did my charge go from 29 to 49 dollars","billing"]
+    ]
+  }
 };
+let scenario = 'letter';
 const HELP = {
   exact:"The output must match the expected answer word for word. Free and instant; \"Technical.\" where you expected \"technical\" counts as a failure.",
   juge:"A second model decides whether the output means the same as the expected answer, even if worded differently. Needed as soon as the output is prose.",
@@ -428,13 +451,19 @@ function caseRow(entree='',attendu=''){
 }
 function letters(){ [...$('cases').querySelectorAll('.cr .l')].forEach((s,i)=>s.textContent=L[i]||i+1); }
 function readCases(){ return [...$('cases').querySelectorAll('.cr')].map(r=>({entree:r.querySelector('.in').value.trim(),attendu:r.querySelector('.out').value.trim()})).filter(c=>c.entree); }
-function loadDemo(){ $('cases').innerHTML=''; DEMO.forEach(([a,b])=>$('cases').appendChild(caseRow(a,b))); letters(); estimate(); }
+function loadInputs(){ const s=SCENARIOS[scenario]; $('cases').innerHTML=''; s.cas.forEach(([a,b])=>$('cases').appendChild(caseRow(a,b))); letters(); estimate(); }
+function loadScenario(k){
+  scenario=k; const s=SCENARIOS[k];
+  $('prompt').value=s.texte; $('nom').value=s.nom;
+  $('rep').value=s.rep; $('temp').value=s.temp;
+  document.querySelectorAll('.chips button[data-scen]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.scen===k)));
+  setMode(s.mode); loadInputs();
+}
 function estimate(){
   const n=readCases().length*Number($('rep').value||1); const k=mode==='exact'?1.2:2.4;
   $('est').textContent=n?n+' pass'+(n>1?'es':'')+(mode!=='exact'?' + '+n+' judgements':'')+' · about '+Math.max(1,Math.round(n*k/60))+' min':'Add at least one input';
   $('run').disabled=n===0; sideFromForm();
 }
-function setPrompt(k){ $('prompt').value=PROMPTS[k].texte; $('nom').value=PROMPTS[k].nom; sideFromForm(); }
 
 /* ---------- views ---------- */
 function view(w){
@@ -547,12 +576,13 @@ async function archives(){
 
 /* ---------- wiring ---------- */
 document.querySelectorAll('.toggle button').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
-$('p-vague').onclick=()=>setPrompt('vague'); $('p-cadree').onclick=()=>setPrompt('cadree');
+document.querySelectorAll('.chips button[data-scen]').forEach(b=>b.onclick=()=>loadScenario(b.dataset.scen));
 $('add').onclick=()=>{ $('cases').appendChild(caseRow()); letters(); estimate(); };
-$('load-demo').onclick=loadDemo; $('run').onclick=()=>run();
+$('load-demo').onclick=loadInputs; $('run').onclick=()=>run();
 $('rep').oninput=estimate; $('temp').oninput=estimate; $('nom').oninput=sideFromForm;
 $('n-essai').onclick=()=>view(current?'res':'form'); $('n-arch').onclick=()=>view('arch'); $('n-new').onclick=()=>view('form');
-setMode('exact'); setPrompt('cadree'); loadDemo(); view('form');
+$('n-new').addEventListener('click',()=>{ if(!readCases().length) loadScenario(scenario); });
+loadScenario('letter'); view('form');
 </script>
 </body>
 </html>
