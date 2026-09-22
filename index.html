@@ -11,8 +11,8 @@
 :root{
   --canvas:#ffffff; --cloud:#f6f8fa; --frost:#eceff3;
   --ash:#cdd2d9; --mist:#c1c7d0;
-  --fog:#a4abb8; --steel:#818898; --slate:#666d80; --graphite:#36394a; --midnight:#272835; --onyx:#1a1b25;
-  --violet:#5e4cff; --lavender:#c8ccf3; --lilac:#dfdbff;
+  --fog:#a4abb8; --steel:#6b7183; --slate:#666d80; --graphite:#36394a; --midnight:#272835; --onyx:#1a1b25;
+  --violet:#5e4cff; --violet-ink:#4a3ad6; --lavender:#c8ccf3; --lilac:#dfdbff;
   --ok:#1f8a4c; --ok-bg:#e3f4ea; --warn:#b26a00; --warn-bg:#fdf1dc; --bad:#c62b2b; --bad-bg:#fbe5e5;
   --display:'Space Grotesk',ui-sans-serif,system-ui,sans-serif;
   --sans:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -47,7 +47,7 @@ button,input,textarea{font-family:inherit}
 .btn-violet:disabled{background:var(--lavender);cursor:not-allowed}
 .btn-ghost{background:var(--canvas);color:var(--graphite);border:1px solid var(--ash)}
 .btn-ghost:hover{border-color:var(--steel)}
-.btn-text{background:none;border:0;padding:6px 8px;color:var(--violet);font-weight:500;cursor:pointer;border-radius:8px;font-size:13px}
+.btn-text{background:none;border:0;padding:6px 8px;color:var(--violet-ink);font-weight:500;cursor:pointer;border-radius:8px;font-size:13px}
 .btn-text:hover{background:var(--lilac)}
 
 /* ---------- layout ---------- */
@@ -64,7 +64,7 @@ button,input,textarea{font-family:inherit}
 .kv .k{color:var(--slate)}
 .kv .v{color:var(--graphite);font-weight:500;text-align:right;overflow-wrap:anywhere}
 .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;background:var(--cloud);color:var(--graphite)}
-.badge.violet{background:var(--lilac);color:var(--violet)}
+.badge.violet{background:var(--lilac);color:var(--violet-ink)}
 .badge.ok{background:var(--ok-bg);color:var(--ok)}
 .badge.warn{background:var(--warn-bg);color:var(--warn)}
 .badge.bad{background:var(--bad-bg);color:var(--bad)}
@@ -76,7 +76,7 @@ button,input,textarea{font-family:inherit}
 h1{font-family:var(--display);font-weight:600;font-size:48px;line-height:1.05;letter-spacing:-1px;color:var(--graphite);margin:0 0 8px;max-width:20ch}
 h1.md{font-size:32px;line-height:1.2;letter-spacing:-.64px}
 h2{font-family:var(--display);font-weight:500;font-size:24px;line-height:1.25;letter-spacing:-.48px;margin:0 0 4px;color:var(--graphite)}
-h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);letter-spacing:.01em}
+h2.sh,h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);letter-spacing:.01em}
 .sub{color:var(--slate);font-size:16px;letter-spacing:-.16px;margin:0 0 24px;max-width:60ch}
 .hero{position:relative;margin-bottom:24px}
 .mosaic{position:absolute;right:0;top:-6px;width:120px;height:80px;display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
@@ -99,7 +99,7 @@ input[type=number]{width:84px}
 .chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .chips button{background:var(--cloud);border:0;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:500;color:var(--graphite);cursor:pointer}
 .chips button:hover{background:var(--frost)}
-.chips button[aria-pressed="true"]{background:var(--lilac);color:var(--violet)}
+.chips button[aria-pressed="true"]{background:var(--lilac);color:var(--violet-ink)}
 .toggle{display:inline-flex;background:var(--cloud);border-radius:999px;padding:3px;gap:2px}
 .toggle button{background:none;border:1px solid transparent;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;color:var(--slate);cursor:pointer}
 .toggle button[aria-pressed="true"]{background:var(--canvas);color:var(--graphite);border-color:var(--ash);box-shadow:rgba(39,40,53,.08) 0 2px 2px -1px}
@@ -107,6 +107,7 @@ input[type=number]{width:84px}
 .cr{display:grid;grid-template-columns:36px 1fr 1fr 36px;gap:8px;align-items:center;padding:8px 8px 8px 12px;border-top:1px solid var(--frost)}
 .cr:first-child{border-top:0}
 .cr.libre{grid-template-columns:36px 1fr 36px}
+.cr.libre .out{display:none}
 .cr .l{font-size:12px;font-weight:600;color:var(--steel)}
 .cr input{border-color:transparent;background:var(--cloud);padding:8px 10px;font-size:13px}
 .cr input:focus{background:var(--canvas)}
@@ -139,7 +140,7 @@ input[type=number]{width:84px}
 .stat.ok .v{color:var(--ok)} .stat.warn .v{color:var(--warn)} .stat.bad .v{color:var(--bad)}
 table{width:100%;border-collapse:collapse}
 thead th{text-align:left;font-size:12px;font-weight:500;color:var(--steel);padding:0 12px 10px 0;border-bottom:1px solid var(--ash)}
-thead th.r{text-align:right;padding-right:0}
+thead th.r{text-align:right;padding:0 0 10px 18px;white-space:nowrap}
 tbody td{padding:12px 12px 12px 0;border-bottom:1px solid var(--frost);vertical-align:top;font-size:14px}
 tbody td.r{text-align:right;padding-right:0;white-space:nowrap}
 tbody tr.row{cursor:pointer}
@@ -264,7 +265,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
       </div>
 
       <div class="card">
-        <div class="eyebrow" style="margin-bottom:10px"><h3 style="margin:0">Test inputs</h3><span class="lab" id="cas-sub"></span></div>
+        <div class="eyebrow" style="margin-bottom:10px"><h2 class="sh" style="margin:0">Test inputs</h2><span class="lab" id="cas-sub"></span></div>
         <div class="cases" id="cases"></div>
         <div class="chips">
           <button id="add">+ Add input</button>
@@ -273,7 +274,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
       </div>
 
       <div class="card">
-        <h3 style="margin-bottom:12px">Conditions</h3>
+        <h2 class="sh" style="margin-bottom:12px">Conditions</h2>
         <div class="inline">
           <div><label class="f" for="rep">Repetitions per input</label><input type="number" id="rep" min="1" max="5" value="3" /></div>
           <div><label class="f" for="temp">Temperature</label><input type="number" id="temp" min="0" max="1" step="0.1" value="1" /></div>
@@ -320,19 +321,19 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
       </div>
 
       <div class="two">
-        <div class="card"><h3>Observation</h3><p class="obs" id="obs"></p></div>
-        <div class="card"><h3 id="lit-h">Disputed cases</h3><ul class="lit" id="lit"></ul></div>
+        <div class="card"><h2 class="sh">Observation</h2><p class="obs" id="obs"></p></div>
+        <div class="card"><h2 class="sh" id="lit-h">Disputed cases</h2><ul class="lit" id="lit"></ul></div>
       </div>
 
       <div class="card corr hidden" id="corr">
-        <div class="eyebrow"><h3 style="margin:0">Reviewer's suggested fix</h3><span class="badge violet" id="conf"></span></div>
+        <div class="eyebrow"><h2 class="sh" style="margin:0">Reviewer's suggested fix</h2><span class="badge violet" id="conf"></span></div>
         <ul class="probs" id="probs"></ul>
         <div class="cols">
           <div>
             <div class="term-h"><i></i><i></i><i></i><span>corrected prompt</span></div>
             <pre class="term" id="pc"></pre>
           </div>
-          <div><h3>What changes, and why</h3><ul class="chg" id="chg"></ul></div>
+          <div><h2 class="sh">What changes, and why</h2><ul class="chg" id="chg"></ul></div>
         </div>
         <div class="acts">
           <button class="btn btn-violet" id="apply">Apply and run again</button>
