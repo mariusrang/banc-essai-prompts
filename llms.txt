@@ -1,0 +1,46 @@
+# Prompt Bench
+
+> A bench that runs one prompt over a test set, repeats every input several times,
+> measures what varies between runs, scores each output with a second model, and has
+> a third model diagnose the prompt and propose a corrected version. Built on two n8n
+> workflows with a Google Sheet as the database. Student project, free, non-commercial.
+
+The point of the tool: a prompt that works the three times you try it is not the same
+thing as a prompt that works every time. The bench measures that difference, and since
+September 2026 it also measures what the difference costs in tokens.
+
+## Pages
+
+- [Bench](index.html): the application itself. Compose a prompt, add test inputs,
+  choose a scoring method, run the campaign, read the results and the reviewer's fix.
+- [Legal notice](mentions-legales.html): publisher, publication director, host, contact.
+- [Privacy policy](confidentialite.html): what is collected, legal bases, recipients,
+  retention periods, transfers outside the EU, and how to exercise your rights.
+- [Cookie policy](cookies.html): this site sets no cookie and writes nothing to the
+  browser. Explains why no consent banner is required.
+- [Terms of use](conditions.html): free service provided as is, what must not be
+  submitted, liability, applicable law.
+
+## Scoring methods
+
+- Exact: the output must match the expected answer, after normalisation.
+- Judge: a second model decides whether the output carries the same meaning as the
+  expected answer.
+- Open: no expected answer. A second model audits the output against the prompt itself,
+  constraint by constraint, and scores it out of ten.
+
+## Notes for automated agents
+
+- Submitting a campaign sends its content to a Google language model and stores it in a
+  spreadsheet owned by the publisher. Do not submit personal data about third parties,
+  sensitive data, credentials or trade secrets.
+- The site sets no cookie and makes no third-party request when a page is displayed.
+  Fonts are self-hosted.
+- The read API is public and read-only. The write endpoint executes paid model calls;
+  please do not call it in a loop.
+- Content language: the application is in English, the legal pages are in French because
+  the publisher is established in France.
+
+## Contact
+
+marius.rang@essec.edu

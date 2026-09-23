@@ -4,16 +4,62 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Prompt Test Bench</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="A bench that runs one prompt over a test set, repeats every input, measures what varies, and proposes a corrected prompt." />
 <style>
+/* Polices auto-hebergees. Aucune requete vers un serveur tiers :
+   charger une police depuis fonts.gstatic.com transmet l adresse IP
+   du visiteur a Google, ce qui constitue un transfert de donnees
+   personnelles sans base legale. Fichiers issus des paquets
+   @fontsource (licence SIL Open Font License 1.1). */
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/space-grotesk-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/space-grotesk-latin-500-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/space-grotesk-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/space-grotesk-latin-600-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/inter-latin-ext-400-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/inter-latin-400-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/inter-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/inter-latin-500-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/inter-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/inter-latin-600-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/ibm-plex-mono-latin-ext-400-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/ibm-plex-mono-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
 :root{
   --canvas:#ffffff; --cloud:#f6f8fa; --frost:#eceff3;
   --ash:#cdd2d9; --mist:#c1c7d0;
-  --fog:#a4abb8; --steel:#6b7183; --slate:#666d80; --graphite:#36394a; --midnight:#272835; --onyx:#1a1b25;
-  --violet:#5e4cff; --violet-ink:#4a3ad6; --lavender:#c8ccf3; --lilac:#dfdbff;
-  --ok:#1f8a4c; --ok-bg:#e3f4ea; --warn:#b26a00; --warn-bg:#fdf1dc; --bad:#c62b2b; --bad-bg:#fbe5e5;
+  --fog:#6b7183; --steel:#6b7183; --slate:#666d80; --graphite:#36394a; --midnight:#272835; --onyx:#1a1b25;
+  --violet:#5e4cff; --violet-ink:#4a3ad6; --lavender:#c8ccf3; --lilac:#dfdbff; --lilac-soft:#f0eeff;
+  --ok:#1a7a43; --ok-bg:#e3f4ea; --warn:#8f5500; --warn-bg:#fdf1dc; --bad:#c62b2b; --bad-bg:#fbe5e5;
   --display:'Space Grotesk',ui-sans-serif,system-ui,sans-serif;
   --sans:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -21,6 +67,10 @@
   --shadow-elev:rgba(39,40,53,0.1) 0 0 0 1px, rgba(39,40,53,0.08) 0 24px 24px -12px, rgba(39,40,53,0.08) 0 12px 12px -6px, rgba(39,40,53,0.08) 0 6px 6px -3px, rgba(39,40,53,0.08) 0 2px 2px -1px;
 }
 *{box-sizing:border-box}
+.skip{position:absolute;left:-9999px;top:0;z-index:100;background:var(--midnight);color:#fff;padding:10px 16px;border-radius:0 0 8px 0;font-size:14px}
+.skip:focus{left:0}
+:focus-visible{outline:2px solid var(--violet);outline-offset:2px;border-radius:4px}
+input:focus-visible,textarea:focus-visible{outline:none}
 html,body{margin:0;padding:0}
 body{background:var(--canvas);color:var(--graphite);font-family:var(--sans);font-size:14px;line-height:1.63;letter-spacing:-.14px;-webkit-font-smoothing:antialiased}
 button,input,textarea{font-family:inherit}
@@ -162,9 +212,9 @@ tbody td{padding:12px 12px 12px 0;border-bottom:1px solid var(--frost);vertical-
 tbody td.r{text-align:right;padding-right:0;white-space:nowrap}
 tbody tr.row{cursor:pointer}
 tbody tr.row:hover td{background:var(--cloud)}
-tbody tr.row.open td{background:var(--lilac)}
+tbody tr.row.open td{background:var(--lilac-soft)}
 td.l{width:40px;font-size:12px;font-weight:600;color:var(--steel);padding-top:15px}
-tr.open td.l{color:var(--violet)}
+tr.open td.l{color:var(--violet-ink)}
 td.q{overflow-wrap:anywhere}
 td.q .att{font-size:12px;color:var(--steel);margin-top:2px}
 td.q .att b{font-weight:500;color:var(--slate)}
@@ -210,6 +260,16 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 .fill{height:100%;background:var(--ok);border-radius:999px}
 .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
 .empty{padding:30px 0;color:var(--slate);font-size:15px}
+/* ---------- pied de page ---------- */
+.foot{border-top:1px solid var(--ash);background:var(--cloud);margin-top:56px}
+.foot-in{max-width:1200px;margin:0 auto;padding:24px;display:flex;justify-content:space-between;
+  align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--slate)}
+.foot-in p{margin:0}
+.foot-in nav{display:flex;gap:18px;flex-wrap:wrap}
+.foot-in a{color:var(--slate);text-decoration:none;border-bottom:1px solid var(--mist)}
+.foot-in a:hover{color:var(--graphite);border-bottom-color:var(--graphite)}
+@media(max-width:760px){.foot-in{flex-direction:column;align-items:flex-start;padding:20px 16px}}
+
 /* ---------- telephone ----------
    En dessous de 760px : le contenu passe avant le protocole, les tableaux
    deviennent des cartes empilees. Sans ca la page force sa largeur a celle
@@ -248,7 +308,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
     padding:14px 2px;border-top:1px solid var(--frost)}
   tbody tr.row:first-child{border-top:0}
   tbody tr.row:hover td,tbody tr.row.open td{background:none}
-  tbody tr.row.open{background:var(--lilac);border-radius:8px}
+  tbody tr.row.open{background:var(--lilac-soft);border-radius:8px}
   td.l{order:1;font-weight:600;color:var(--steel);font-size:12px}
   td.q{order:2;flex:1 1 100%;font-size:13.5px}
   td.sc{order:1}
@@ -266,8 +326,10 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 </head>
 <body>
 
-<nav class="nav"><div class="nav-in">
-  <div class="brand"><span class="bolt"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>Prompt Bench</div>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="nav" aria-label="Main"><div class="nav-in">
+  <div class="brand"><span class="bolt" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>Prompt Bench</div>
   <div class="links">
     <button id="n-essai" aria-current="true">Run</button>
     <button id="n-arch" aria-current="false">History</button>
@@ -302,7 +364,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
     <!-- FORM -->
     <div id="v-form">
       <div class="hero">
-        <div class="mosaic" id="mosaic"></div>
+        <div class="mosaic" id="mosaic" aria-hidden="true"></div>
         <div class="eyebrow"><span class="lab">New run</span></div>
         <h1>One prompt, a few inputs, several passes.</h1>
         <p class="sub">The bench repeats every input, measures what varies, then a reviewer reads the failures and proposes a corrected prompt.</p>
@@ -350,15 +412,16 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
         </div>
         <div class="launch">
           <button class="btn btn-violet" id="run">Run the bench</button>
-          <span class="est" id="est"></span>
+          <span class="est" id="est" aria-live="polite"></span>
         </div>
-        <div class="err hidden" id="err"></div>
+        <p class="help" style="margin-top:12px">What you submit is sent to the evaluation engine and to Google's Gemini API, and is stored. <a href="confidentialite.html">Privacy policy</a>.</p>
+        <div class="err hidden" id="err" role="alert"></div>
       </div>
     </div>
 
     <!-- RUNNING -->
     <div id="v-run" class="hidden">
-      <div class="eyebrow"><span class="lab" id="run-no">Running</span><span class="lab mono" id="elapsed"></span></div>
+      <div class="eyebrow"><span class="lab" id="run-no">Running</span><span class="lab mono" id="elapsed" aria-live="polite"></span></div>
       <h1 class="md" id="run-title"></h1>
       <p class="sub">Passes are running on the engine. This page polls the API every three seconds.</p>
       <div class="card" style="max-width:520px">
@@ -440,6 +503,18 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 
   </main>
 </div></div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <p>Prompt Bench — a student project by Marius Rang. Not a commercial service.</p>
+    <nav aria-label="Legal">
+      <a href="mentions-legales.html">Mentions légales</a>
+      <a href="confidentialite.html">Confidentialité</a>
+      <a href="cookies.html">Cookies</a>
+      <a href="conditions.html">Conditions d'utilisation</a>
+    </nav>
+  </div>
+</footer>
 
 <script>
 const API = 'https://mariusrang.app.n8n.cloud/webhook';
@@ -549,7 +624,7 @@ function setMode(m){
 }
 function caseRow(entree='',attendu=''){
   const d=document.createElement('div'); d.className='cr'+(mode==='libre'?' libre':'');
-  d.innerHTML='<span class="l"></span><input type="text" class="in" placeholder="Input sent to the model" /><input type="text" class="out" placeholder="Expected answer" /><button class="x" type="button" aria-label="Remove">×</button>';
+  d.innerHTML='<span class="l" aria-hidden="true"></span><input type="text" class="in" placeholder="Input sent to the model" aria-label="Input sent to the model" /><input type="text" class="out" placeholder="Expected answer" aria-label="Expected answer" /><button class="x" type="button" aria-label="Remove this input">×</button>';
   d.querySelector('.in').value=entree; d.querySelector('.out').value=attendu;
   d.querySelector('.x').onclick=()=>{ d.remove(); letters(); estimate(); };
   d.querySelectorAll('input').forEach(i=>i.oninput=estimate);
