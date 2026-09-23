@@ -84,6 +84,23 @@ h2.sh,h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);let
 @media(max-width:960px){.mosaic{display:none}}
 @media(max-width:640px){h1{font-size:34px;letter-spacing:-.6px}}
 
+/* ---------- cost ---------- */
+.costhead{display:flex;align-items:baseline;gap:10px;margin-top:6px}
+.costhead .v{font-family:var(--display);font-size:32px;font-weight:600;color:var(--graphite);letter-spacing:-.64px;line-height:1.1}
+.costhead .t{font-size:13px;color:var(--steel)}
+.cost .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--frost);margin:14px 0 12px}
+.cost .bar i{display:block;height:100%}
+.costleg{list-style:none;margin:0;padding:0;display:flex;gap:22px;flex-wrap:wrap}
+.costleg li{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)}
+.costleg .dot{width:8px;height:8px;border-radius:2px;flex:none}
+.costleg b{color:var(--graphite);font-weight:500}
+.proj{margin-top:16px;padding-top:16px;border-top:1px solid var(--frost);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--slate)}
+.proj input{width:110px}
+.projout{margin-left:auto;text-align:right}
+.projout .v{font-family:var(--display);font-size:26px;font-weight:500;color:var(--graphite);letter-spacing:-.52px;line-height:1.2}
+.projout .d{font-size:12px;color:var(--steel);max-width:44ch}
+@media(max-width:640px){.projout{margin-left:0;text-align:left}}
+
 /* ---------- form ---------- */
 label.f{display:block;font-size:13px;font-weight:500;color:var(--graphite);margin:0 0 6px}
 .help{font-size:13px;color:var(--slate);margin:6px 0 0;max-width:62ch}
@@ -313,6 +330,19 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 
       <div class="stats" id="stats"></div>
 
+      <div class="card cost hidden" id="cost">
+        <div class="eyebrow"><h2 class="sh" style="margin:0">What this run cost</h2><span class="lab" id="tarif"></span></div>
+        <div class="costhead"><span class="v" id="cost-v"></span><span class="t" id="cost-t"></span></div>
+        <div class="bar" id="costbar"></div>
+        <ul class="costleg" id="costleg"></ul>
+        <div class="proj">
+          <span>In production, at</span>
+          <input type="number" id="vol" value="10000" min="0" step="1000" />
+          <span>calls per month, this prompt costs</span>
+          <div class="projout" id="projout"></div>
+        </div>
+      </div>
+
       <div class="card">
         <table>
           <thead><tr><th></th><th>Input</th><th class="r">Passes</th><th class="r" id="th-score">Score</th><th class="r">Stability</th></tr></thead>
@@ -349,7 +379,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
       <p class="sub">Click a run to reopen its results and diagnosis.</p>
       <div class="card">
         <table>
-          <thead><tr><th>#</th><th>Title</th><th>Scoring</th><th class="r">Pass rate</th><th></th><th class="r">Unstable</th></tr></thead>
+          <thead><tr><th>#</th><th>Title</th><th>Scoring</th><th class="r">Pass rate</th><th></th><th class="r">Unstable</th><th class="r">Cost</th></tr></thead>
           <tbody id="arch"></tbody>
         </table>
         <p class="empty hidden" id="arch-empty">No completed run yet.</p>
@@ -412,6 +442,28 @@ let mode='exact', poll=null, timer=null, t0=0, current=null;
 (function(){ const cols=['#5e4cff','#c8ccf3','#dfdbff','transparent','transparent']; let h='';
   for(let i=0;i<60;i++){ h+='<i style="background:'+cols[Math.floor(Math.random()*cols.length)]+'"></i>'; } $('mosaic').innerHTML=h; })();
 
+/* ---------- cost model ----------
+   Memes constantes que le moteur n8n, calibrees sur l execution 581 :
+   4.3 caracteres par token pour le texte envoye, 345 tokens pour le
+   systemMessage du juge, 675 pour celui du reviseur. La longueur des
+   sorties, elle, ne peut pas etre connue avant de lancer : on pose une
+   hypothese de SORTIE_TYPE tokens par reponse, et l ecran le dit. */
+const TARIF={modele:'gemini-3-flash-preview',in:.50,out:3};
+const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=40;
+const tk=s=>Math.round(String(s||'').length/R_IN);
+const usd=(i,o)=>(i*TARIF.in+o*TARIF.out)/1e6;
+const money=v=>v==null?'—':(v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
+const ktok=v=>v==null?'—':(v>=1000?Math.round(v/1000)+'k':String(v));
+function estimerCampagne(prompt,cas,rep,m){
+  const n=cas.length*rep; if(!n) return null;
+  const p=tk(prompt), entrees=cas.reduce((a,c)=>a+tk(c.entree),0)*rep;
+  const execIn=p*n+entrees, execOut=SORTIE_TYPE*n;
+  const juge=m!=='exact';
+  const jugeIn=juge?n*(SYS_JUGE+p)+entrees+execOut:0;
+  const jugeOut=juge?n*VERDICT_TYPE:0;
+  return {tin:execIn+jugeIn+SYS_REV+p+3400, tout:execOut+jugeOut+900};
+}
+
 /* ---------- sidebar ---------- */
 function sideFromForm(){
   const n=readCases().length;
@@ -462,8 +514,15 @@ function loadScenario(k){
   setMode(s.mode); loadInputs();
 }
 function estimate(){
-  const n=readCases().length*Number($('rep').value||1); const k=mode==='exact'?1.2:2.4;
-  $('est').textContent=n?n+' pass'+(n>1?'es':'')+(mode!=='exact'?' + '+n+' judgements':'')+' · about '+Math.max(1,Math.round(n*k/60))+' min':'Add at least one input';
+  const cas=readCases(); const rep=Number($('rep').value||1); const n=cas.length*rep;
+  const k=mode==='exact'?1.2:2.4;
+  if(!n){ $('est').textContent='Add at least one input'; }
+  else{
+    const e=estimerCampagne($('prompt').value,cas,rep,mode);
+    $('est').textContent=n+' pass'+(n>1?'es':'')+(mode!=='exact'?' + '+n+' judgements':'')
+      +' · about '+Math.max(1,Math.round(n*k/60))+' min'
+      +' · ~'+ktok(e.tin+e.tout)+' tokens, ~'+money(usd(e.tin,e.tout));
+  }
   $('run').disabled=n===0; sideFromForm();
 }
 
@@ -523,6 +582,7 @@ function render(d){
   if(hasScore) st+=stat('Average score',c.scoreMoyen+'<small>/10</small>',tone(c.scoreMoyen*10));
   st+=stat('Unstable cases',inst,inst?'warn':'')+stat('Always wrong',ech,ech?'bad':'')+stat('Passes',c.nbAppels,'');
   $('stats').innerHTML=st;
+  renderCout(c);
 
   $('rows').innerHTML=(c.resultatsManquants?'<tr><td colspan="5" style="padding:14px 0"><div class="err">The campaign finished but no per-case rows were written. This usually means a column is missing in the <span class="mono">resultats</span> sheet (check that it has a <span class="mono">Score</span> column), or the workflow was not republished after the last change.</div></td></tr>':'')+d.cas.map((cas,i)=>{
     const runs=(byCase[cas.casId]||[]).sort((a,b)=>a.repetition-b.repetition);
@@ -565,6 +625,28 @@ function render(d){
   view('res');
 }
 function stat(k,v,t){ return '<div class="stat '+t+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+function renderCout(c){
+  const co=c.cout;
+  if(!co||co.total==null||co.execution==null){ $('cost').classList.add('hidden'); return; }
+  const parts=[['Running the prompt',co.execution,'#5e4cff'],
+               ['Judging the outputs',co.jugement,'#a99cff'],
+               ['Reviewing the prompt',co.revision,'#dfdbff']];
+  const tot=co.total||1;
+  $('costbar').innerHTML=parts.map(x=>'<i style="width:'+(Math.max(0,x[1])/tot*100).toFixed(1)+'%;background:'+x[2]+'"></i>').join('');
+  $('costleg').innerHTML=parts.map(x=>'<li><span class="dot" style="background:'+x[2]+'"></span>'+x[0]+' <b>'+money(x[1])+'</b> · '+Math.round(Math.max(0,x[1])/tot*100)+'%</li>').join('');
+  $('cost-v').textContent=money(co.total);
+  const tt=(c.tokensEntree||0)+(c.tokensSortie||0);
+  $('cost-t').textContent=tt?ktok(tt)+' tokens · '+ktok(c.tokensEntree)+' in, '+ktok(c.tokensSortie)+' out':'';
+  $('tarif').textContent=(co.modele||TARIF.modele)+' · $'+co.prixIn+'/M in · $'+co.prixOut+'/M out'+(co.estime?' · token counts estimated':'');
+  projeter(c); $('cost').classList.remove('hidden');
+}
+function projeter(c){
+  const u=c&&c.cout?c.cout.parAppelProduction:null;
+  if(u==null){ $('projout').innerHTML=''; return; }
+  const v=Math.max(0,Number($('vol').value)||0);
+  $('projout').innerHTML='<div class="v">'+money(u*v)+' / month</div>'
+    +'<div class="d">'+money(u)+' per call. Execution only: the judge and the reviewer are test tooling, you do not pay for them in production.</div>';
+}
 function caseLetter(d,casId){ const i=d.cas.findIndex(x=>x.casId===casId); return i>=0?(L[i]||i+1):(casId||''); }
 function tronc(s,n){ s=String(s==null?'':s); return s.length>n?s.slice(0,n-1)+'…':s; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
@@ -579,7 +661,8 @@ async function archives(){
     $('arch').innerHTML=done.map(c=>'<tr class="row" data-id="'+c.campagneId+'"><td class="l">'+shortId(c.campagneId)+'</td><td class="q">'+esc(c.nom)+'</td><td><span class="badge">'+esc(MODE_LABEL[c.mode]||c.mode)+'</span></td>'+
       '<td class="r" style="font-weight:500">'+c.tauxReussite+' %'+(c.scoreMoyen!=null?' <span style="color:var(--steel);font-weight:400">· '+c.scoreMoyen+'/10</span>':'')+'</td>'+
       '<td><div class="track"><div class="fill '+tone(c.tauxReussite)+'" style="width:'+c.tauxReussite+'%"></div></div></td>'+
-      '<td class="r">'+(c.casInstables!=null?(c.casInstables?'<span class="badge warn">'+c.casInstables+'</span>':'0'):'—')+'</td></tr>').join('');
+      '<td class="r">'+(c.casInstables!=null?(c.casInstables?'<span class="badge warn">'+c.casInstables+'</span>':'0'):'—')+'</td>'+
+      '<td class="r mono" style="font-size:13px;color:var(--slate)">'+(c.cout&&c.cout.total!=null?money(c.cout.total):'—')+'</td></tr>').join('');
     [...$('arch').querySelectorAll('tr')].forEach(tr=>tr.onclick=async()=>{ const r2=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(tr.dataset.id)+'&t='+Date.now()); const d2=await r2.json(); if(d2.type==='campagne') render(d2); });
   }catch(e){ $('arch-empty').textContent="The read API is not responding. Check that the workflow is published."; $('arch-empty').classList.remove('hidden'); }
 }
@@ -590,6 +673,8 @@ document.querySelectorAll('.chips button[data-scen]').forEach(b=>b.onclick=()=>l
 $('add').onclick=()=>{ $('cases').appendChild(caseRow()); letters(); estimate(); };
 $('load-demo').onclick=loadInputs; $('run').onclick=()=>run();
 $('rep').oninput=estimate; $('temp').oninput=estimate; $('nom').oninput=sideFromForm;
+$('prompt').addEventListener('input',estimate);
+$('vol').oninput=()=>projeter(current&&current.campagne);
 $('n-essai').onclick=()=>view(current?'res':'form'); $('n-arch').onclick=()=>view('arch'); $('n-new').onclick=()=>view('form');
 $('n-new').addEventListener('click',()=>{ if(!readCases().length) loadScenario(scenario); });
 loadScenario('letter'); view('form');
