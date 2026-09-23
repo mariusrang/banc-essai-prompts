@@ -210,6 +210,58 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 .fill{height:100%;background:var(--ok);border-radius:999px}
 .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
 .empty{padding:30px 0;color:var(--slate);font-size:15px}
+/* ---------- telephone ----------
+   En dessous de 760px : le contenu passe avant le protocole, les tableaux
+   deviennent des cartes empilees. Sans ca la page force sa largeur a celle
+   du tableau le plus large et le navigateur dezoome tout. */
+@media(max-width:760px){
+  .wrap{padding:24px 16px 64px}
+  h1{font-size:32px;letter-spacing:-.6px}
+  h1.md{font-size:26px;letter-spacing:-.5px}
+  .sub{font-size:15px}
+
+  .nav{height:auto}
+  .nav-in{padding:10px 16px;gap:8px}
+  .brand{font-size:14px;gap:8px;white-space:nowrap}
+  .brand .bolt{width:18px;height:18px}
+  .links{gap:0}
+  .links button{padding:7px 9px;font-size:13px;white-space:nowrap}
+  .links .btn{padding:8px 12px;font-size:13px;margin-left:4px}
+
+  .grid{display:flex;flex-direction:column}
+  .side{position:static;order:2;margin-top:20px}
+
+  .card{padding:14px}
+  .cr{grid-template-columns:22px 1fr 28px;row-gap:6px}
+  .cr .out{grid-column:2/3;grid-row:2}
+  .cr.libre .out{display:none}
+  .proj{align-items:flex-start}
+  .projout{margin-left:0;text-align:left}
+  .projout .d{max-width:none}
+  .costleg{gap:8px 16px}
+
+  /* tableaux en cartes */
+  table,tbody,tr,td{display:block}
+  thead{display:none}
+  tbody td{padding:0;border:0;white-space:normal}
+  tbody tr.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+    padding:14px 2px;border-top:1px solid var(--frost)}
+  tbody tr.row:first-child{border-top:0}
+  tbody tr.row:hover td,tbody tr.row.open td{background:none}
+  tbody tr.row.open{background:var(--lilac);border-radius:8px}
+  td.l{order:1;font-weight:600;color:var(--steel);font-size:12px}
+  td.q{order:2;flex:1 1 100%;font-size:13.5px}
+  td.sc{order:1}
+  td.pass,td.score,td.pr{order:3}
+  /* les en-tetes de colonne disparaissent : on reetiquette les nombres nus */
+  td.score::before{content:'score ';font-size:12px;color:var(--steel);font-weight:400}
+  td.uns::before{content:'unstable ';font-size:12px;color:var(--steel)}
+  td.stab,td.cost{order:3;margin-left:auto}
+  td.uns{order:3}
+  td.bar{display:none}
+  tr.det td{padding:10px 12px 12px;border-bottom:0}
+  tr.det li.out{max-height:260px;font-size:12.5px}
+}
 </style>
 </head>
 <body>
@@ -599,9 +651,9 @@ function render(d){
     const vers=runs.filter(r=>r.justification).map(r=>'<li>'+(r.score!=null?'<span class="sc mono">'+r.score+'/10</span>':'')+esc(r.justification)+'</li>').join('');
     return '<tr class="row" data-i="'+i+'"><td class="l">'+(L[i]||i+1)+'</td>'+
       '<td class="q">'+esc(cas.entree)+(cas.attendu?'<div class="att"><b>expected</b> · '+esc(cas.attendu)+'</div>':'')+'</td>'+
-      '<td class="r">'+cas.reussites+'/'+cas.total+strip+'</td>'+
-      (hasScore?'<td class="r" style="color:var(--'+(cas.scoreMoyen==null?'steel':cas.scoreMoyen>=8?'ok':cas.scoreMoyen>=5?'warn':'bad')+')">'+(cas.scoreMoyen!=null?cas.scoreMoyen:'—')+'</td>':'')+
-      '<td class="r">'+badge+'</td></tr>'+
+      '<td class="r pass">'+cas.reussites+'/'+cas.total+strip+'</td>'+
+      (hasScore?'<td class="r score" style="color:var(--'+(cas.scoreMoyen==null?'steel':cas.scoreMoyen>=8?'ok':cas.scoreMoyen>=5?'warn':'bad')+')">'+(cas.scoreMoyen!=null?cas.scoreMoyen:'—')+'</td>':'')+
+      '<td class="r stab">'+badge+'</td></tr>'+
       '<tr class="det hidden"><td colspan="5">'+outs+(vers?'<span class="lab">Verdicts</span><ul>'+vers+'</ul>':'')+'</td></tr>';
   }).join('');
   [...$('rows').querySelectorAll('tr.row')].forEach(tr=>tr.onclick=()=>{ const det=tr.nextElementSibling; const open=det.classList.toggle('hidden'); tr.classList.toggle('open',!open); });
@@ -658,11 +710,11 @@ async function archives(){
     const r=await fetch(API+'/eval-results?t='+Date.now()); const d=await r.json();
     const done=(d.campagnes||[]).filter(c=>c.statut==='termine'&&c.tauxReussite!=null);
     if(!done.length){ $('arch-empty').classList.remove('hidden'); return; }
-    $('arch').innerHTML=done.map(c=>'<tr class="row" data-id="'+c.campagneId+'"><td class="l">'+shortId(c.campagneId)+'</td><td class="q">'+esc(c.nom)+'</td><td><span class="badge">'+esc(MODE_LABEL[c.mode]||c.mode)+'</span></td>'+
-      '<td class="r" style="font-weight:500">'+c.tauxReussite+' %'+(c.scoreMoyen!=null?' <span style="color:var(--steel);font-weight:400">· '+c.scoreMoyen+'/10</span>':'')+'</td>'+
-      '<td><div class="track"><div class="fill '+tone(c.tauxReussite)+'" style="width:'+c.tauxReussite+'%"></div></div></td>'+
-      '<td class="r">'+(c.casInstables!=null?(c.casInstables?'<span class="badge warn">'+c.casInstables+'</span>':'0'):'—')+'</td>'+
-      '<td class="r mono" style="font-size:13px;color:var(--slate)">'+(c.cout&&c.cout.total!=null?money(c.cout.total):'—')+'</td></tr>').join('');
+    $('arch').innerHTML=done.map(c=>'<tr class="row" data-id="'+c.campagneId+'"><td class="l">'+shortId(c.campagneId)+'</td><td class="q">'+esc(c.nom)+'</td><td class="sc"><span class="badge">'+esc(MODE_LABEL[c.mode]||c.mode)+'</span></td>'+
+      '<td class="r pr" style="font-weight:500">'+c.tauxReussite+' %'+(c.scoreMoyen!=null?' <span style="color:var(--steel);font-weight:400">· '+c.scoreMoyen+'/10</span>':'')+'</td>'+
+      '<td class="bar"><div class="track"><div class="fill '+tone(c.tauxReussite)+'" style="width:'+c.tauxReussite+'%"></div></div></td>'+
+      '<td class="r uns">'+(c.casInstables!=null?(c.casInstables?'<span class="badge warn">'+c.casInstables+'</span>':'0'):'—')+'</td>'+
+      '<td class="r cost mono" style="font-size:13px;color:var(--slate)">'+(c.cout&&c.cout.total!=null?money(c.cout.total):'—')+'</td></tr>').join('');
     [...$('arch').querySelectorAll('tr')].forEach(tr=>tr.onclick=async()=>{ const r2=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(tr.dataset.id)+'&t='+Date.now()); const d2=await r2.json(); if(d2.type==='campagne') render(d2); });
   }catch(e){ $('arch-empty').textContent="The read API is not responding. Check that the workflow is published."; $('arch-empty').classList.remove('hidden'); }
 }
