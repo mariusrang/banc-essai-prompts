@@ -1,0 +1,1169 @@
+{
+  "name": "Banc eval - moteur devaluation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "eval-run",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "3f3ff402-6643-46ec-a1fe-d641f6fcbeb3",
+      "name": "Lancer une campagne",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "9253e42a-2d99-4c1c-97b4-8ba10764d874"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "prompt-notempty",
+              "leftValue": "={{ $json.body.prompt }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "cas-count",
+              "leftValue": "={{ ($json.body.cas || []).length }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e75446d5-c126-4c2d-9d2d-7d57a3bf5122",
+      "name": "Requete valide",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst cas = Array.isArray(body.cas) ? body.cas : [];\nconst repetitions = Math.min(Math.max(parseInt(body.repetitions) || 3, 1), 5);\nconst campagneId = 'camp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);\nconst modesValides = ['exact', 'juge', 'libre'];\nconst mode = modesValides.includes(body.mode) ? body.mode : 'exact';\nconst prompt = String(body.prompt || '');\nconst temperature = typeof body.temperature === 'number' ? body.temperature : 0.7;\n\nconst runs = [];\ncas.forEach((c, i) => {\n  for (let r = 1; r <= repetitions; r++) {\n    runs.push({\n      campagneId,\n      casId: 'cas_' + (i + 1),\n      entree: String(c.entree != null ? c.entree : ''),\n      attendu: mode === 'libre' ? '' : String(c.attendu != null ? c.attendu : ''),\n      repetition: r,\n      mode,\n      prompt,\n      temperature\n    });\n  }\n});\n\nreturn [{ json: {\n  campagneId,\n  nom: String(body.nom || 'Campagne sans nom'),\n  prompt,\n  mode,\n  temperature,\n  repetitions,\n  nbCas: cas.length,\n  nbAppels: runs.length,\n  runs\n} }];"
+      },
+      "id": "b539d3f6-8aa7-442d-8523-8f2222f7ea6a",
+      "name": "Preparer la campagne",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ campagneId: $json.campagneId, statut: \"en cours\", nbAppels: $json.nbAppels, nbCas: $json.nbCas }) }}",
+        "options": {
+          "responseCode": 202,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "89af4762-739d-44fd-a0b1-02929b8d9f75",
+      "name": "Repondre a l app",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Banc eval prompt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campagnes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Campagne ID": "={{ $json.campagneId }}",
+            "Date": "={{ $now.toISO() }}",
+            "Nom": "={{ $json.nom }}",
+            "Prompt": "={{ $json.prompt }}",
+            "Mode": "={{ $json.mode }}",
+            "Temperature": "={{ $json.temperature }}",
+            "Repetitions": "={{ $json.repetitions }}",
+            "Nb cas": "={{ $json.nbCas }}",
+            "Nb appels": "={{ $json.nbAppels }}",
+            "Statut": "en cours",
+            "Taux reussite": "",
+            "Cas instables": "",
+            "Latence moyenne": ""
+          },
+          "schema": [
+            {
+              "id": "Campagne ID",
+              "displayName": "Campagne ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nom",
+              "displayName": "Nom",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Prompt",
+              "displayName": "Prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mode",
+              "displayName": "Mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Temperature",
+              "displayName": "Temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Repetitions",
+              "displayName": "Repetitions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nb cas",
+              "displayName": "Nb cas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nb appels",
+              "displayName": "Nb appels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Statut",
+              "displayName": "Statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Taux reussite",
+              "displayName": "Taux reussite",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Cas instables",
+              "displayName": "Cas instables",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Latence moyenne",
+              "displayName": "Latence moyenne",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "62b7c58c-c38a-4e1c-a8f1-36707d0f200b",
+      "name": "Enregistrer la campagne",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        880,
+        368
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "runs",
+        "options": {}
+      },
+      "id": "63519f47-df1a-48a5-a4d8-df23275599e9",
+      "name": "Eclater les executions",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.entree }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "={{ $json.prompt }}",
+          "maxOutputTokens": 3072,
+          "temperature": "={{ $json.temperature }}",
+          "thinkingBudget": 0
+        }
+      },
+      "id": "f0d26ccc-c63e-4bda-aee7-d3c2cf046745",
+      "name": "Executer le prompt",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1488,
+        368
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Estimation des tokens ---------------------------------------------\n// Calibre sur l execution 581 du 22/09/2026 (campagne camp_mucwi5f9_bqrg4) :\n//   envoye  48915 caracteres -> 11403 tokens reels -> 4.3 caracteres par token\n//   genere  31583 caracteres ->  5701 tokens reels -> 5.5 caracteres par token\n// Le texte envoye (prompt structure, listes, termes techniques) se tokenise\n// moins bien que la prose generee, d ou deux ratios differents.\n// Une sortie non vide coute au moins un token, meme d un seul mot.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_SORTIE = 5.5;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estOut = s => { const n = String(s == null ? '' : s).length; return n ? Math.max(1, Math.round(n / CHARS_TOKEN_SORTIE)) : 0; };\n\nconst runs = $('Eclater les executions').all();\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nreturn $input.all().map((item, i) => {\n  const r = runs[i] ? runs[i].json : {};\n  const erreur = item.json && item.json.error ? String(item.json.error.message || item.json.error) : '';\n  const sortie = String(extraireTexte(item.json)).trim();\n  return { json: {\n    campagneId: r.campagneId,\n    casId: r.casId,\n    entree: r.entree,\n    attendu: r.attendu,\n    repetition: r.repetition,\n    mode: r.mode,\n    prompt: r.prompt,\n    sortie,\n    erreur,\n    tokensInExec: estIn(r.prompt) + estIn(r.entree),\n    tokensOutExec: estOut(sortie)\n  } };\n});"
+      },
+      "id": "14f5efc7-8d80-4cbe-ba60-5bdccfbc13f9",
+      "name": "Normaliser la sortie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "pas-exact",
+              "leftValue": "={{ $json.mode }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "rightValue": "exact"
+            }
+          ],
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fbe0f737-a4b3-412e-9e93-ef72ee465edf",
+      "name": "Mode juge",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1888,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=INSTRUCTION GIVEN TO THE MODEL:\n{{ $json.prompt }}\n\nINPUT SUBMITTED:\n{{ $json.entree }}\n\nEXPECTED ANSWER:\n{{ $json.attendu || '(none provided, evaluate the answer against the instruction itself)' }}\n\nANSWER OBTAINED:\n{{ $json.sortie }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are a strict automated evaluator. You are given the instruction that was sent to a model, the input it received, sometimes an expected answer, and the answer it produced.\n\nCASE 1, an expected answer is provided.\nJudge whether the obtained answer is equivalent in substance to the expected one. Wording may differ, only the meaning counts. Score 10 if equivalent, 0 if not, an intermediate value if it is partially equivalent but omits something essential.\n\nCASE 2, no expected answer is provided.\nYou audit the output against the instruction, constraint by constraint. Proceed in this order:\n1. List every explicit checkable constraint the instruction states: length, number of paragraphs, required structure, language, tone, forbidden phrasings, and factual limits such as never claiming anything that is not listed.\n2. For each constraint decide respected or violated, using only the text of the output.\n3. When the instruction sets a length, count the words of the output yourself before judging that constraint.\n4. Any statement in the output that is not supported by the information given in the instruction is a violation, however plausible it sounds. Overstating a level of experience, a diploma or a language level counts as a violation.\n5. Start from 10 and subtract 2 for every violated constraint. The floor is 0.\n\nIn both cases the verdict is true if and only if the score is 8 or higher.\n\nBe exacting. A fluent, pleasant output that breaks a stated constraint is a failure, not a near miss. In the justification, name the decisive violated constraint, or state that every constraint was respected. Write in English.\n\nReply only with a valid JSON object, no text around it and no code fences:\n{\"verdict\": true, \"score\": 8, \"justification\": \"one sentence of at most 20 words naming the decisive constraint\"}",
+          "maxOutputTokens": 1024,
+          "temperature": 0,
+          "thinkingBudget": 0
+        }
+      },
+      "id": "ccef22e3-6408-47d8-8085-74b346731ba8",
+      "name": "Juger la sortie",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1984,
+        208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le juge recoit a chaque appel : son systemMessage (constante calibree),\n// le prompt teste, l entree, la reponse attendue et la sortie obtenue.\n// 24970 tokens reels sur 18 appels a l execution 581, dont 345 par appel\n// imputables au systemMessage une fois le reste estime a 4.3 chars/token.\n// Le verdict sort en JSON, qui se tokenise plus dense que la prose (4.1).\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_JUGE = 345;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nconst sources = $('Mode juge').all();\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nreturn $input.all().map((item, i) => {\n  const base = sources[i] ? sources[i].json : {};\n  const brut = extraireTexte(item.json);\n  const verdict = parser(brut);\n  const score = verdict && typeof verdict.score === 'number' ? Math.max(0, Math.min(10, Math.round(verdict.score))) : null;\n  const reussi = verdict ? (verdict.verdict === true || (score !== null && score >= 7)) : false;\n  return { json: Object.assign({}, base, {\n    reussi,\n    score: score !== null ? score : (reussi ? 10 : 0),\n    justification: verdict ? String(verdict.justification || '') : 'The judge did not return a usable verdict',\n    tokensInJuge: TOKENS_SYS_JUGE + estIn(base.prompt) + estIn(base.entree) + estIn(base.attendu) + estIn(base.sortie),\n    tokensOutJuge: estJson(brut)\n  }) };\n});"
+      },
+      "id": "7a1d651f-b25e-4467-993a-a8a178e0cdff",
+      "name": "Verdict du juge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lignes = $input.all().map(i => i.json);\nconst campagne = $('Preparer la campagne').first().json;\nconst tronc = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '...' : s; };\n\n// --- Grille tarifaire ---------------------------------------------------\n// gemini-3-flash-preview, tarif standard payant releve sur ai.google.dev le 23/09/2026.\n// Les prix changent : c est un parametre, pas une verite. Il est renvoye a\n// l application pour etre affiche sous le cout.\nconst MODELE = 'gemini-3-flash-preview';\nconst PRIX_IN = 0.50;   // USD par million de tokens en entree\nconst PRIX_OUT = 3.00;  // USD par million de tokens en sortie\nconst usd = (tin, tout) => Math.round(((tin * PRIX_IN + tout * PRIX_OUT) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  if (!parCas[l.casId]) {\n    parCas[l.casId] = { casId: l.casId, entree: l.entree, attendu: l.attendu, sorties: [], scores: [], justifs: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[l.casId];\n  c.total += 1;\n  if (l.reussi) c.reussites += 1;\n  c.sorties.push(String(l.sortie == null ? '' : l.sortie));\n  if (typeof l.score === 'number') c.scores.push(l.score);\n  if (l.justification) c.justifs.push(String(l.justification));\n  c.tIn += (l.tokensInExec || 0) + (l.tokensInJuge || 0);\n  c.tOut += (l.tokensOutExec || 0) + (l.tokensOutJuge || 0);\n});\n\nconst cas = Object.values(parCas).map(c => {\n  const distinctes = Array.from(new Set(c.sorties.map(s => s.toLowerCase().trim())));\n  const scoreMoyen = c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null;\n  const scoreMin = c.scores.length ? Math.min.apply(null, c.scores) : null;\n  const scoreMax = c.scores.length ? Math.max.apply(null, c.scores) : null;\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes.length,\n    exemple: c.sorties[0] || '',\n    scoreMoyen,\n    scoreMin,\n    scoreMax,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: usd(c.tIn, c.tOut),\n    apercu: distinctes.slice(0, 3).map(s => tronc(s, 700)),\n    justifications: Array.from(new Set(c.justifs)).slice(0, 3).map(s => tronc(s, 200))\n  };\n});\n\nconst totalAppels = lignes.length;\nconst totalReussites = lignes.filter(l => l.reussi).length;\nconst tauxReussite = totalAppels ? Math.round((totalReussites / totalAppels) * 1000) / 10 : 0;\nconst casInstables = cas.filter(c => c.statut === 'instable' || (c.scoreMax !== null && c.scoreMax - c.scoreMin >= 2)).length;\nconst casEchoues = cas.filter(c => c.statut === 'echec').length;\nconst tousScores = lignes.filter(l => typeof l.score === 'number').map(l => l.score);\nconst scoreMoyen = tousScores.length ? Math.round(tousScores.reduce((a, b) => a + b, 0) / tousScores.length * 10) / 10 : null;\n\n// --- Ventilation des tokens en trois postes -----------------------------\n// La revision est ajoutee plus loin, elle n a pas encore eu lieu a ce stade.\nconst somme = (f) => lignes.reduce((a, l) => a + (l[f] || 0), 0);\nconst tokens = {\n  execIn: somme('tokensInExec'),\n  execOut: somme('tokensOutExec'),\n  jugeIn: somme('tokensInJuge'),\n  jugeOut: somme('tokensOutJuge'),\n  revIn: 0,\n  revOut: 0\n};\n\nconst resumeAnalyse = cas.map(c => ({\n  cas: c.casId,\n  entree: tronc(c.entree, 300),\n  attendu: c.attendu || null,\n  resultat: c.reussites + '/' + c.total,\n  statut: c.statut,\n  scores_par_repetition: c.scores,\n  ecart_de_score: c.scoreMax !== null ? c.scoreMax - c.scoreMin : null,\n  sorties_observees: c.apercu,\n  verdicts: c.justifications\n}));\n\nconst detail = lignes.map(l => ({\n  campagneId: l.campagneId,\n  casId: l.casId,\n  repetition: l.repetition,\n  entree: l.entree,\n  attendu: l.attendu,\n  sortie: l.sortie,\n  reussi: l.reussi ? 'oui' : 'non',\n  score: typeof l.score === 'number' ? l.score : '',\n  justification: l.justification || '',\n  erreur: l.erreur || '',\n  tokensIn: (l.tokensInExec || 0) + (l.tokensInJuge || 0),\n  tokensOut: (l.tokensOutExec || 0) + (l.tokensOutJuge || 0)\n}));\n\nreturn [{ json: {\n  campagneId: campagne.campagneId,\n  nom: campagne.nom,\n  mode: campagne.mode,\n  prompt: campagne.prompt,\n  temperature: campagne.temperature,\n  repetitions: campagne.repetitions,\n  tauxReussite,\n  scoreMoyen,\n  totalAppels,\n  totalReussites,\n  casInstables,\n  casEchoues,\n  nbCas: cas.length,\n  cas,\n  tokens,\n  tarif: { modele: MODELE, prixIn: PRIX_IN, prixOut: PRIX_OUT },\n  resumeAnalyse,\n  detail\n} }];"
+      },
+      "id": "01b11213-31b1-4cdb-9f9e-b89e84591692",
+      "name": "Agreger la campagne",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Comparaison stricte, apres normalisation : minuscules, accents retires,\n// ponctuation finale retiree, espaces rognes.\n// Volontairement SANS repli sur \"la reponse attendue est contenue dans la\n// sortie\" : ce repli laissait passer un paragraphe entier des lors qu il\n// mentionnait le mot attendu, ce qui contredit la promesse de l interface\n// (\"must match the expected answer word for word\"). Pour accepter une\n// formulation differente a sens egal, c est le mode Juge qui sert.\nfunction normaliser(valeur) {\n  return String(valeur == null ? '' : valeur)\n    .toLowerCase()\n    .normalize('NFD')\n    .replace(/[̀-ͯ]/g, '')\n    .replace(/[.!?;:,]+$/g, '')\n    .trim();\n}\n\nconst tronc = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '...' : s; };\n\nreturn $input.all().map(item => {\n  const j = item.json;\n  const sortie = normaliser(j.sortie);\n  const attendu = normaliser(j.attendu);\n  let reussi = false;\n  let justification = '';\n\n  if (j.erreur) {\n    justification = 'Call failed: ' + j.erreur;\n  } else if (!sortie) {\n    justification = 'Empty output';\n  } else if (sortie === attendu) {\n    reussi = true;\n    justification = 'Exact match';\n  } else if (sortie.indexOf(attendu) !== -1) {\n    justification = 'Expected exactly \"' + j.attendu + '\", got ' + tronc(j.sortie, 80) + ' (the expected value is in there, but the output is not it)';\n  } else {\n    justification = 'Expected \"' + j.attendu + '\", got ' + tronc(j.sortie, 80);\n  }\n\n  // La comparaison exacte ne consomme aucun token : c est du code, pas un modele.\n  return { json: Object.assign({}, j, {\n    reussi, score: reussi ? 10 : 0, justification,\n    tokensInJuge: 0, tokensOutJuge: 0\n  }) };\n});"
+      },
+      "id": "4ae86f05-e8d1-42fa-9e82-ee250b98317e",
+      "name": "Comparaison exacte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ erreur: \"Il faut un prompt non vide et au moins un cas de test.\" }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f2edb609-d51e-4f98-b87a-dba0451e00e5",
+      "name": "Repondre requete invalide",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Banc eval prompt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campagnes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "Campagne ID"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "Campagne ID",
+              "id": "Campagne ID",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Statut",
+              "id": "Statut",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Taux reussite",
+              "id": "Taux reussite",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Cas instables",
+              "id": "Cas instables",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Score moyen",
+              "id": "Score moyen",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Diagnostic",
+              "id": "Diagnostic",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Prompt corrige",
+              "id": "Prompt corrige",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Analyse",
+              "id": "Analyse",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Tokens entree",
+              "id": "Tokens entree",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Tokens sortie",
+              "id": "Tokens sortie",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Cout USD",
+              "id": "Cout USD",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Cout detail",
+              "id": "Cout detail",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Analyse": "={{ $json.analyseJson }}",
+            "Campagne ID": "={{ $json.campagneId }}",
+            "Cas instables": "={{ $json.casInstables }}",
+            "Diagnostic": "={{ $json.diagnostic }}",
+            "Prompt corrige": "={{ $json.promptCorrige }}",
+            "Score moyen": "={{ $json.scoreMoyen === null ? '' : $json.scoreMoyen }}",
+            "Statut": "termine",
+            "Taux reussite": "={{ $json.tauxReussite }}",
+            "Cout USD": "={{ $json.cout.total }}",
+            "Cout detail": "={{ $json.coutJson }}",
+            "Tokens entree": "={{ $json.tokensEntree }}",
+            "Tokens sortie": "={{ $json.tokensSortie }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "ed05c186-e647-4c59-a5e4-ac19d7b94dc5",
+      "name": "Mettre a jour la campagne",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3744,
+        624
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "detail",
+        "options": {}
+      },
+      "id": "88a231cc-edf2-4048-aae5-7b008fb5bb87",
+      "name": "Eclater le detail",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Banc eval prompt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "resultats"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Campagne ID",
+              "id": "Campagne ID",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Cas ID",
+              "id": "Cas ID",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Repetition",
+              "id": "Repetition",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Entree",
+              "id": "Entree",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Attendu",
+              "id": "Attendu",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Sortie",
+              "id": "Sortie",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Reussi",
+              "id": "Reussi",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Score",
+              "id": "Score",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Justification",
+              "id": "Justification",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Erreur",
+              "id": "Erreur",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Tokens entree",
+              "id": "Tokens entree",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Tokens sortie",
+              "id": "Tokens sortie",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Attendu": "={{ $json.attendu }}",
+            "Campagne ID": "={{ $json.campagneId }}",
+            "Cas ID": "={{ $json.casId }}",
+            "Entree": "={{ $json.entree }}",
+            "Erreur": "={{ $json.erreur }}",
+            "Justification": "={{ $json.justification }}",
+            "Repetition": "={{ $json.repetition }}",
+            "Reussi": "={{ $json.reussi }}",
+            "Score": "={{ $json.score }}",
+            "Sortie": "={{ $json.sortie }}",
+            "Tokens entree": "={{ $json.tokensIn }}",
+            "Tokens sortie": "={{ $json.tokensOut }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "8405e8a7-620d-43a2-a555-5d54670505ea",
+      "name": "Enregistrer les resultats",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2864,
+        624
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## 1. API dentree, reponse immediate\n\nLe webhook est appele par lapp. Le IF rejette une requete sans prompt ou sans cas de test, avec un code 400 explicite.\n\nLa reponse part des la preparation, avant le moindre appel au modele: une campagne de 45 appels prend une minute, aucun navigateur nattend aussi longtemps. Lapp recoit un identifiant de campagne et viendra chercher les resultats ensuite.",
+        "color": 4
+      },
+      "id": "0fa3e48a-2663-4be4-989d-36cd12bb74de",
+      "name": "Sticky Note 9b58ab4a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Execution du plan de test\n\nPreparer la campagne deplie les cas en autant dexecutions que de repetitions demandees: 15 cas fois 3 repetitions donnent 45 appels, chacun devenant un item.\n\nRepeter le meme cas est tout linteret du banc: cest la seule facon de mesurer le non determinisme plutot que de le supposer. Lappel modele est en continue on fail, donc un appel qui casse fait echouer une ligne, pas la campagne.",
+        "color": 5
+      },
+      "id": "74fa3269-c3d3-4a7f-a815-23a42afa2e8e",
+      "name": "Sticky Note 5d68981d",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Deux facons de comparer\n\nMode exact: comparaison de chaines normalisee, gratuite et instantanee. Suffisant pour de la classification.\n\nMode juge: un second appel au modele evalue si la reponse obtenue vaut la reponse attendue. Indispensable des que la sortie est du texte libre, ou aucune egalite de chaine na de sens. Le juge tourne a temperature zero et rend un verdict JSON, verifie par le noeud qui suit.",
+        "color": 3
+      },
+      "id": "7de02c6d-5413-4191-8a77-207e394bc634",
+      "name": "Sticky Note 44a8114d",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Statistiques et persistance\n\nLagregation calcule le taux de reussite global, mais surtout le nombre de cas instables: un cas dont les repetitions ne donnent pas toutes la meme sortie. Cest la metrique que personne ne regarde et qui explique les surprises en production.\n\nLa ligne de campagne passe de en cours a termine, et chaque appel est conserve ligne a ligne pour pouvoir rejouer lanalyse plus tard.",
+        "color": 6
+      },
+      "id": "d1b75caa-0a77-4edb-8a31-86111786d6db",
+      "name": "Sticky Note 9b8907a5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "runs",
+              "name": "runs",
+              "type": "array",
+              "value": "={{ $('Preparer la campagne').first().json.runs }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fae26a8b-8427-410e-9025-d6fd329a72fe",
+      "name": "Reprendre le plan de test",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1088,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "cachedResultName": "models/gemini-3-flash-preview",
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=PROMPT UNDER TEST:\n<<<\n{{ $json.prompt }}\n>>>\n\nSCORING METHOD: {{ $json.mode }} ({{ $json.mode === 'exact' ? 'strict string comparison against the expected answer' : ($json.mode === 'juge' ? 'a judge model compares against the expected answer' : 'no expected answer, a judge model evaluates against the instruction itself') }})\nCONDITIONS: {{ $json.repetitions }} repetitions per case, temperature {{ $json.temperature }}\n\nOVERALL RESULTS: pass rate {{ $json.tauxReussite }}%{{ $json.scoreMoyen !== null ? ', average score ' + $json.scoreMoyen + '/10' : '' }}, {{ $json.casInstables }} unstable cases and {{ $json.casEchoues }} failing cases out of {{ $json.nbCas }}\n\nCOST: on average each call sent {{ Math.round(($json.tokens && $json.tokens.execIn || 0) / ($json.totalAppels || 1)) }} input tokens to the model and received {{ Math.round(($json.tokens && $json.tokens.execOut || 0) / ($json.totalAppels || 1)) }} output tokens back.\n\nPER-CASE DETAIL:\n{{ JSON.stringify($json.resumeAnalyse, null, 1) }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are an expert in prompt design for language models. You are given a prompt, the conditions of a test campaign, its overall results, its average token consumption per call, and the per-case detail: the input, the expected answer if any, the score of each repetition, the spread between the best and the worst repetition, the outputs actually observed, and the evaluator's verdicts.\n\nYour work has two parts.\n\nFirst, the diagnosis. Explain why the prompt fails or wavers, relying only on what is observed in the cases. Distinguish four families of problems: ambiguity in the instruction (the model cannot decide), unconstrained format (it answers correctly but not in the expected form), missing context or rule (it cannot guess what the author had in mind), and conflicting rules (two instructions pull in opposite directions and nothing says which one wins).\n\nRead the score spread as carefully as the failures. A case that scores 9 on one repetition and 6 on another, with no change in the input, means the prompt leaves a decision to chance. Name which decision. A case that passes every repetition at the same score is genuinely under control and you say so.\n\nWhen expected answers are given and the model keeps choosing a different but plausible answer, the author is applying a rule the prompt never states. Infer that rule from the expected answers and write it into the prompt explicitly.\n\nThen, the correction. Propose a corrected version of the prompt, directly usable. Strict rules:\n- Never change the intent or the domain of the prompt.\n- Every modification must address a problem observed in the cases, or the cost problem described below, not a stylistic preference.\n- Resolve the conflicts you found by stating an explicit priority, add the rule that was missing for an observed case, and give a default behaviour for inputs that fit no category.\n- Cost matters. Output tokens cost about six times as much as input tokens. If the observed outputs contain material the task does not use (explanations nobody asked for, labels, headings, markdown), constrain the output to exactly what the task needs and say so in the changes. Never add length to the prompt unless it fixes an observed failure.\n- Stay concise: a good prompt is short and has no repetition.\n- Keep the corrected prompt in the same language as the original prompt.\n- If the results are already excellent and stable, say so honestly, keep the prompt nearly identical, and propose at most one robustness improvement for the weakest case.\n\nWrite the diagnosis, the problems and the change explanations in English.\n\nFormatting rule: never use the less-than, greater-than or ampersand characters in your texts.\n\nReply only with a valid JSON object, no text around it and no code fences, with exactly this shape:\n{\"diagnostic\": \"two to four sentences\", \"problemes\": [{\"cas\": \"cas_3\", \"observation\": \"what happened\", \"cause\": \"why the prompt allows it\"}], \"promptCorrige\": \"the full corrected prompt\", \"changements\": [{\"quoi\": \"what changes\", \"pourquoi\": \"the problem it fixes\"}], \"confiance\": \"high\"}",
+          "maxOutputTokens": 4096,
+          "temperature": 0.3,
+          "thinkingBudget": 0
+        }
+      },
+      "id": "0ca2e5f8-d30e-4e80-b70a-050a63ffe448",
+      "name": "Analyser le prompt",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        3312,
+        624
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Agreger la campagne').first().json;\n\n// Le reviseur est un troisieme appel, une seule fois par campagne.\n// 4650 tokens en entree a l execution 581, dont environ 675 pour son\n// systemMessage une fois le reste estime a 4.3 caracteres par token.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_REVISEUR = 675;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nconst brut = extraireTexte($input.first().json);\nconst analyse = parser(brut) || {};\nconst problemes = Array.isArray(analyse.problemes) ? analyse.problemes : [];\nconst changements = Array.isArray(analyse.changements) ? analyse.changements : [];\n\n// --- Comptes finaux -----------------------------------------------------\nconst tarif = base.tarif || { modele: 'inconnu', prixIn: 0, prixOut: 0 };\nconst t = Object.assign({ execIn: 0, execOut: 0, jugeIn: 0, jugeOut: 0 }, base.tokens, {\n  revIn: TOKENS_SYS_REVISEUR + estIn(base.prompt) + estIn(JSON.stringify(base.resumeAnalyse || [])),\n  revOut: estJson(brut)\n});\n\nconst usd = (tin, tout) => Math.round(((tin * tarif.prixIn + tout * tarif.prixOut) / 1e6) * 1e6) / 1e6;\nconst tokensEntree = t.execIn + t.jugeIn + t.revIn;\nconst tokensSortie = t.execOut + t.jugeOut + t.revOut;\n\n// Le cout d un appel en production n est PAS le cout du banc : en production\n// on paie l execution seule, pas le juge ni le reviseur, qui sont l outillage\n// de test. C est ce chiffre qu il faut projeter a l echelle.\nconst appels = base.totalAppels || 1;\nconst coutParAppel = Math.round((usd(t.execIn, t.execOut) / appels) * 1e8) / 1e8;\n\nconst cout = {\n  total: usd(tokensEntree, tokensSortie),\n  execution: usd(t.execIn, t.execOut),\n  jugement: usd(t.jugeIn, t.jugeOut),\n  revision: usd(t.revIn, t.revOut),\n  parAppelProduction: coutParAppel,\n  modele: tarif.modele,\n  prixIn: tarif.prixIn,\n  prixOut: tarif.prixOut,\n  estime: true\n};\n\nreturn [{ json: Object.assign({}, base, {\n  diagnostic: String(analyse.diagnostic || ''),\n  promptCorrige: String(analyse.promptCorrige || ''),\n  confianceAnalyse: String(analyse.confiance || ''),\n  problemes,\n  changements,\n  analyseJson: JSON.stringify({ problemes, changements, confiance: analyse.confiance || '' }),\n  analyseOk: !!analyse.promptCorrige,\n  tokens: t,\n  tokensEntree,\n  tokensSortie,\n  cout,\n  coutJson: JSON.stringify(cout)\n}) }];"
+      },
+      "id": "ae8e0e1a-d4cd-4efa-935c-dc7b24577410",
+      "name": "Extraire l analyse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Les resultats viennent d etre ecrits ligne a ligne.\n// On revient a l item unique de l agregation pour lancer le reviseur une seule fois.\nreturn [$('Agreger la campagne').first()];"
+      },
+      "id": "b5c16bd5-99eb-4954-9e03-3c151d0b09b3",
+      "name": "Reprendre l agregation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3088,
+        624
+      ],
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Lancer une campagne": {
+      "main": [
+        [
+          {
+            "node": "Requete valide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requete valide": {
+      "main": [
+        [
+          {
+            "node": "Preparer la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Repondre requete invalide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer la campagne": {
+      "main": [
+        [
+          {
+            "node": "Repondre a l app",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repondre a l app": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eclater les executions": {
+      "main": [
+        [
+          {
+            "node": "Executer le prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executer le prompt": {
+      "main": [
+        [
+          {
+            "node": "Normaliser la sortie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser la sortie": {
+      "main": [
+        [
+          {
+            "node": "Mode juge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mode juge": {
+      "main": [
+        [
+          {
+            "node": "Juger la sortie",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comparaison exacte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Juger la sortie": {
+      "main": [
+        [
+          {
+            "node": "Verdict du juge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verdict du juge": {
+      "main": [
+        [
+          {
+            "node": "Agreger la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agreger la campagne": {
+      "main": [
+        [
+          {
+            "node": "Eclater le detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comparaison exacte": {
+      "main": [
+        [
+          {
+            "node": "Agreger la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eclater le detail": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer les resultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enregistrer la campagne": {
+      "main": [
+        [
+          {
+            "node": "Reprendre le plan de test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reprendre le plan de test": {
+      "main": [
+        [
+          {
+            "node": "Eclater les executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyser le prompt": {
+      "main": [
+        [
+          {
+            "node": "Extraire l analyse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire l analyse": {
+      "main": [
+        [
+          {
+            "node": "Mettre a jour la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enregistrer les resultats": {
+      "main": [
+        [
+          {
+            "node": "Reprendre l agregation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reprendre l agregation": {
+      "main": [
+        [
+          {
+            "node": "Analyser le prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

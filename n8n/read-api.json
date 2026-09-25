@@ -1,0 +1,235 @@
+{
+  "name": "Banc eval - API de lecture",
+  "connections": {
+    "Demander les resultats": {
+      "main": [
+        [
+          {
+            "node": "Lire les campagnes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les campagnes": {
+      "main": [
+        [
+          {
+            "node": "Agreger les campagnes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agreger les campagnes": {
+      "main": [
+        [
+          {
+            "node": "Lire les resultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les resultats": {
+      "main": [
+        [
+          {
+            "node": "Agreger les resultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agreger les resultats": {
+      "main": [
+        [
+          {
+            "node": "Construire la reponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construire la reponse": {
+      "main": [
+        [
+          {
+            "node": "Repondre les resultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "eval-results",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "c94d7d58-cabb-498e-86e2-c131d3fba006",
+      "name": "Demander les resultats",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "24cca4f2-2fad-44f4-be73-8cdf4cc21707"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "campagnes"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRangeA1",
+              "range": "A:Z"
+            }
+          }
+        }
+      },
+      "id": "72e34827-6ac6-4156-80e6-873319544d67",
+      "name": "Lire les campagnes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "campagnes",
+        "options": {}
+      },
+      "id": "6efb0250-837f-4fe6-9a71-d210a55f9983",
+      "name": "Agreger les campagnes",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "resultats",
+          "mode": "name"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRangeA1",
+              "range": "A:Z"
+            }
+          }
+        }
+      },
+      "id": "141e10f8-777f-4ace-8a91-5c20f81c532c",
+      "name": "Lire les resultats",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "resultats",
+        "options": {}
+      },
+      "id": "0caf8930-f888-40c7-a492-54c6e11495b8",
+      "name": "Agreger les resultats",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const requete = $('Demander les resultats').first().json;\nconst demande = String((requete.query && requete.query.campagneId) || '').trim();\n\nconst campagnes = ($('Agreger les campagnes').first().json.campagnes || [])\n  .filter(c => c && c['Campagne ID']);\nconst resultats = ($input.first().json.resultats || [])\n  .filter(r => r && r['Campagne ID']);\n\nfunction nombreOuNull(v) {\n  if (v === '' || v == null) return null;\n  const n = Number(v);\n  return isNaN(n) ? null : n;\n}\n\n// La ventilation du cout est stockee en JSON avec la campagne, tarif compris.\n// On la relit telle quelle : une campagne ancienne garde le prix qui\n// s appliquait le jour ou elle a tourne, meme si la grille a change depuis.\nfunction lireCout(c) {\n  try {\n    const o = JSON.parse(c['Cout detail'] || '{}');\n    if (o && typeof o.total === 'number') return o;\n  } catch (e) {}\n  const total = nombreOuNull(c['Cout USD']);\n  return total === null ? null : { total, estime: true };\n}\n\nfunction resumerCampagne(c) {\n  return {\n    campagneId: c['Campagne ID'],\n    date: c['Date'] || '',\n    nom: c['Nom'] || '',\n    mode: c['Mode'] || '',\n    temperature: nombreOuNull(c['Temperature']),\n    repetitions: Number(c['Repetitions']) || 0,\n    nbCas: Number(c['Nb cas']) || 0,\n    nbAppels: Number(c['Nb appels']) || 0,\n    statut: c['Statut'] || '',\n    tauxReussite: nombreOuNull(c['Taux reussite']),\n    casInstables: nombreOuNull(c['Cas instables']),\n    scoreMoyen: nombreOuNull(c['Score moyen']),\n    tokensEntree: nombreOuNull(c['Tokens entree']),\n    tokensSortie: nombreOuNull(c['Tokens sortie']),\n    cout: lireCout(c)\n  };\n}\n\nif (!demande) {\n  const liste = campagnes.map(resumerCampagne).reverse();\n  return [{ json: { type: 'liste', campagnes: liste } }];\n}\n\nconst brute = campagnes.filter(c => c['Campagne ID'] === demande).pop();\n\nif (!brute) {\n  return [{ json: { type: 'introuvable', campagneId: demande, erreur: 'No campaign with this id.' } }];\n}\n\nconst campagne = resumerCampagne(brute);\ncampagne.prompt = brute['Prompt'] || '';\ncampagne.diagnostic = brute['Diagnostic'] || '';\ncampagne.promptCorrige = brute['Prompt corrige'] || '';\n\nlet analyse = { problemes: [], changements: [], confiance: '' };\ntry {\n  const a = JSON.parse(brute['Analyse'] || '{}');\n  analyse = {\n    problemes: Array.isArray(a.problemes) ? a.problemes : [],\n    changements: Array.isArray(a.changements) ? a.changements : [],\n    confiance: a.confiance || ''\n  };\n} catch (e) {}\ncampagne.problemes = analyse.problemes;\ncampagne.changements = analyse.changements;\ncampagne.confianceAnalyse = analyse.confiance;\n\nconst lignes = resultats.filter(r => r['Campagne ID'] === demande);\n\nif (campagne.statut !== 'termine') {\n  return [{ json: { type: 'en cours', campagne, cas: [], detail: [] } }];\n}\n\nif (lignes.length === 0) {\n  campagne.resultatsManquants = true;\n  return [{ json: { type: 'campagne', campagne, cas: [], detail: [] } }];\n}\n\nconst prixIn = campagne.cout && typeof campagne.cout.prixIn === 'number' ? campagne.cout.prixIn : 0;\nconst prixOut = campagne.cout && typeof campagne.cout.prixOut === 'number' ? campagne.cout.prixOut : 0;\nconst usd = (tin, tout) => Math.round(((tin * prixIn + tout * prixOut) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  const id = l['Cas ID'];\n  if (!parCas[id]) {\n    parCas[id] = { casId: id, entree: l['Entree'] || '', attendu: l['Attendu'] || '', sorties: [], scores: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[id];\n  c.total += 1;\n  if (String(l['Reussi']).toLowerCase() === 'oui') c.reussites += 1;\n  c.sorties.push(String(l['Sortie'] == null ? '' : l['Sortie']));\n  const s = nombreOuNull(l['Score']);\n  if (s !== null) c.scores.push(s);\n  c.tIn += nombreOuNull(l['Tokens entree']) || 0;\n  c.tOut += nombreOuNull(l['Tokens sortie']) || 0;\n});\n\nconst cas = Object.values(parCas).map(c => {\n  // Deduplication insensible a la casse, mais on renvoie le texte tel qu il a ete produit.\n  const vues = {};\n  const distinctes = [];\n  c.sorties.forEach(s => {\n    const cle = s.toLowerCase().trim();\n    if (!vues[cle]) { vues[cle] = true; distinctes.push(s.trim()); }\n  });\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes,\n    exemple: (c.sorties[0] || '').trim(),\n    scores: c.scores,\n    scoreMoyen: c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null,\n    scoreMin: c.scores.length ? Math.min.apply(null, c.scores) : null,\n    scoreMax: c.scores.length ? Math.max.apply(null, c.scores) : null,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: c.tIn || c.tOut ? usd(c.tIn, c.tOut) : null\n  };\n}).sort((a, b) => a.casId.localeCompare(b.casId, undefined, { numeric: true }));\n\nconst detail = lignes.map(l => ({\n  casId: l['Cas ID'],\n  repetition: Number(l['Repetition']) || 0,\n  sortie: l['Sortie'] || '',\n  reussi: String(l['Reussi']).toLowerCase() === 'oui',\n  score: nombreOuNull(l['Score']),\n  justification: l['Justification'] || '',\n  erreur: l['Erreur'] || '',\n  tokensIn: nombreOuNull(l['Tokens entree']),\n  tokensOut: nombreOuNull(l['Tokens sortie'])\n}));\n\nreturn [{ json: { type: 'campagne', campagne, cas, detail } }];"
+      },
+      "id": "e10e61db-20d4-4aa2-8f03-065f3ee809a2",
+      "name": "Construire la reponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "21c0b8a1-ca41-4906-ad49-fd7a06fdbfbe",
+      "name": "Repondre les resultats",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1328,
+        304
+      ]
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
