@@ -380,7 +380,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
           <textarea id="prompt" placeholder="The prompt under test. It is sent as the system instruction."></textarea>
           <div class="chips">
             <button data-scen="letter" aria-pressed="true">Cover letters</button>
-            <button data-scen="tickets" aria-pressed="false">Ticket classification</button>
+            <button data-scen="tickets" aria-pressed="false">Ticket triage</button>
           </div>
           <p class="help">Loading a scenario replaces the prompt, the inputs and the conditions.</p>
         </div>
@@ -538,26 +538,28 @@ const SCENARIOS = {
     ]
   },
   tickets:{
-    nom:"Ticket classification — constrained prompt",
-    mode:'exact',
+    nom:"Ticket triage — first prompt",
+    mode:'juge',
     temp:1,
     rep:3,
-    texte:"You classify customer support tickets.\n\nAnswer with a single category, lowercase, with no sentence around it:\nbilling, technical, or sales.\n\nWhen a ticket mixes several topics, keep the one the customer expects an action on, not the one mentioned in passing.\nIf nothing fits, answer sales.",
+    texte:"You triage incoming support tickets for our routing system. Give each ticket its priority level: P1, P2 or P3.",
     cas:[
-      ["I want to cancel, it keeps crashing","billing"],
-      ["Payment fails when I click confirm","technical"],
-      ["Wrong invoice because of a display bug","billing"],
-      ["We're 50 people now, I need more seats and I have a login issue","sales"],
-      ["Does the pro plan include SSO? we can't get it configured","sales"],
-      ["Since the price update the app is slow","technical"],
-      ["Thanks for your help yesterday","sales"],
-      ["Why did my charge go from 29 to 49 dollars","billing"]
+      ["Our production API has been returning 500s for twenty minutes. Every customer request is failing.","p1"],
+      ["The webhook fires twice for every event and our database is filling up with duplicate rows.","p1"],
+      ["The CSV export still works but takes about forty seconds instead of five.","p2"],
+      ["We were charged for 25 seats instead of the 20 on our contract, roughly 200 euros too much.","p2"],
+      ["Do you offer a student discount for a class of thirty people?","p3"],
+      ["Nobody on my team can log in since the update on Monday. We are completely blocked.","p1"],
+      ["Invoice 4412 carries the wrong VAT number and our accountant has rejected it.","p2"],
+      ["The link to your documentation returns a 404 from the pricing page.","p3"],
+      ["The payment page crashes for every customer, nobody can subscribe right now.","p1"],
+      ["Could you add a dark mode to the dashboard at some point?","p3"]
     ]
   }
 };
-let scenario = 'letter';
+let scenario = 'tickets';
 const HELP = {
-  exact:"The output must match the expected answer word for word. Free and instant; \"Technical.\" where you expected \"technical\" counts as a failure.",
+  exact:"The output must equal the expected answer, after lowercasing and trimming final punctuation. Free and instant; a correct answer wrapped in a sentence counts as a failure.",
   juge:"A second model decides whether the output means the same as the expected answer, even if worded differently. Needed as soon as the output is prose.",
   libre:"No expected answer. The judge scores each output out of 10 against the prompt itself: format respected, request addressed, nothing invented."
 };
@@ -584,7 +586,11 @@ const ktok=v=>v==null?'—':(v>=1000?Math.round(v/1000)+'k':String(v));
 function estimerCampagne(prompt,cas,rep,m){
   const n=cas.length*rep; if(!n) return null;
   const p=tk(prompt), entrees=cas.reduce((a,c)=>a+tk(c.entree),0)*rep;
-  const execIn=p*n+entrees, execOut=SORTIE_TYPE*n;
+  // Sans reponse attendue (mode Open), la sortie est du texte libre : ~300 tokens.
+  // Avec une reponse attendue, la tache appelle une reponse courte : ~60 tokens,
+  // ce qu un prompt non contraint produit typiquement en ajoutant une justification.
+  const sortieType = m==='libre' ? SORTIE_TYPE : 60;
+  const execIn=p*n+entrees, execOut=sortieType*n;
   const juge=m!=='exact';
   const jugeIn=juge?n*(SYS_JUGE+p)+entrees+execOut:0;
   const jugeOut=juge?n*VERDICT_TYPE:0;
@@ -804,7 +810,7 @@ $('prompt').addEventListener('input',estimate);
 $('vol').oninput=()=>projeter(current&&current.campagne);
 $('n-essai').onclick=()=>view(current?'res':'form'); $('n-arch').onclick=()=>view('arch'); $('n-new').onclick=()=>view('form');
 $('n-new').addEventListener('click',()=>{ if(!readCases().length) loadScenario(scenario); });
-loadScenario('letter'); view('form');
+loadScenario(scenario); view('form');
 </script>
 </body>
 </html>
