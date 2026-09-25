@@ -145,7 +145,7 @@ h2.sh,h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);let
 .costleg .dot{width:8px;height:8px;border-radius:2px;flex:none}
 .costleg b{color:var(--graphite);font-weight:500}
 .proj{margin-top:16px;padding-top:16px;border-top:1px solid var(--frost);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--slate)}
-.proj input{width:110px}
+.proj input[type=number]{width:132px}
 .projout{margin-left:auto;text-align:right}
 .projout .v{font-family:var(--display);font-size:26px;font-weight:500;color:var(--graphite);letter-spacing:-.52px;line-height:1.2}
 .projout .d{font-size:12px;color:var(--steel);max-width:44ch}
@@ -452,7 +452,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
         <ul class="costleg" id="costleg"></ul>
         <div class="proj">
           <span>In production, at</span>
-          <input type="number" id="vol" value="10000" min="0" step="1000" />
+          <input type="number" id="vol" value="1000000" min="0" step="100000" />
           <span>calls per month, this prompt costs</span>
           <div class="projout" id="projout"></div>
         </div>
@@ -538,7 +538,7 @@ const SCENARIOS = {
     ]
   },
   tickets:{
-    nom:"Ticket triage — first prompt",
+    nom:"Ticket triage",
     mode:'juge',
     temp:1,
     rep:3,
@@ -581,7 +581,7 @@ const TARIF={modele:'gemini-3-flash-preview',in:.50,out:3};
 const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=40;
 const tk=s=>Math.round(String(s||'').length/R_IN);
 const usd=(i,o)=>(i*TARIF.in+o*TARIF.out)/1e6;
-const money=v=>v==null?'—':(v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
+const money=v=>v==null?'—':(v>=1000?'$'+Math.round(v).toLocaleString('en-US'):v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
 const ktok=v=>v==null?'—':(v>=1000?Math.round(v/1000)+'k':String(v));
 function estimerCampagne(prompt,cas,rep,m){
   const n=cas.length*rep; if(!n) return null;
