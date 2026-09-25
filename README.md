@@ -1,3 +1,5 @@
+
+
 # Prompt Bench
 
 **How reliable is your prompt, and what does it really cost?**
@@ -8,11 +10,11 @@ It runs on two n8n workflows and a Google Sheet, with a single HTML page as the 
 
 **[Open the live app →](https://mariusrang.github.io/banc-essai-prompts/)**
 
-[![Prompt Bench demo: 66.7 % → 100 %, $203 → $72 per month](docs/demo.gif)](docs/demo.mp4)
+
 
 ## Demo (3 min, English subtitles)
 
-<!-- DEMO VIDEO: on GitHub, edit this file and drag docs/demo.mp4 onto this line. GitHub replaces it with a video player. -->
+[![Prompt Bench demo: 66.7 % → 100 %, $203 → $72 per month](docs/demo.gif)](docs/demo.mp4)
 
 If the player does not show up, [download the video](docs/demo.mp4).
 
