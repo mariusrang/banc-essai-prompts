@@ -19,12 +19,12 @@
 <main class="wrap" id="main">
   <h1>Politique de confidentialité</h1>
   <p class="lede">Ce qui est collecté, pourquoi, pour combien de temps, et comment exercer vos droits.</p>
-  <p class="maj">Dernière mise à jour : 23 septembre 2026</p>
+  <p class="maj">Dernière mise à jour : 1er octobre 2026</p>
 
   <div class="note">
     <p><strong>À lire avant d'utiliser le banc d'essai.</strong> Tout ce que vous saisissez
     — le titre de la campagne, le prompt testé, les cas de test et les réponses attendues —
-    est transmis à un modèle de langage de Google et conservé en clair dans une feuille de calcul
+    est transmis à un modèle de langage hébergé par Groq et conservé en clair dans une feuille de calcul
     dont l'éditeur est propriétaire. <strong>N'y saisissez aucune donnée personnelle concernant
     un tiers, aucune donnée sensible, aucun secret professionnel ou d'affaires.</strong></p>
   </div>
@@ -59,6 +59,12 @@
         <td>Intérêt légitime (art. 6.1.f RGPD)</td>
         <td>Durée fixée par chaque hébergeur, à consulter dans sa propre politique</td>
       </tr>
+      <tr>
+        <td>Historique d'exécution du serveur n8n (contenu des requêtes reçues)</td>
+        <td>Diagnostiquer une campagne qui échoue</td>
+        <td>Intérêt légitime (art. 6.1.f RGPD)</td>
+        <td>7 jours, puis suppression automatique</td>
+      </tr>
     </tbody>
   </table>
 
@@ -82,17 +88,23 @@
     <thead><tr><th>Prestataire</th><th>Rôle</th><th>Lieu</th></tr></thead>
     <tbody>
       <tr><td>GitHub, Inc.</td><td>Hébergement des pages</td><td>États-Unis</td></tr>
-      <tr><td>n8n GmbH (n8n Cloud)</td><td>Orchestration des campagnes</td><td>Union européenne (Allemagne)</td></tr>
-      <tr><td>Google Ireland Limited</td><td>Modèle Gemini et feuille de calcul Google Sheets</td>
-          <td>Union européenne, avec recours possible à des infrastructures aux États-Unis</td></tr>
+      <tr><td>Google Cloud EMEA Limited</td><td>Serveur qui exécute les campagnes (installation n8n
+          de l'éditeur) et feuille de calcul Google Sheets</td>
+          <td>États-Unis (serveur situé dans l'Iowa) et infrastructures de Google</td></tr>
+      <tr><td>Groq, Inc.</td><td>Modèle de langage qui exécute, note et révise les prompts</td>
+          <td>États-Unis</td></tr>
     </tbody>
   </table>
 
   <h3>Transferts hors de l'Union européenne</h3>
-  <p>GitHub et Google sont des sociétés américaines ou rattachées à des groupes américains. Ces
+  <p>GitHub, Google et Groq sont des sociétés américaines ou rattachées à des groupes américains, et
+  le serveur qui exécute les campagnes est situé aux États-Unis. Pour GitHub et Google, ces
   transferts s'appuient sur la décision d'adéquation de la Commission européenne du 10 juillet 2023
   relative au cadre de protection des données UE–États-Unis, ainsi que, le cas échéant, sur les
-  clauses contractuelles types. Vous pouvez consulter les engagements de chaque prestataire dans
+  clauses contractuelles types. Pour Groq, ils s'appuient sur les clauses contractuelles types de
+  la Commission européenne, intégrées à son accord de traitement des données. Groq indique ne pas
+  conserver par défaut le contenu des requêtes, sauf journaux techniques gardés au plus 30 jours
+  pour le diagnostic et la lutte contre les abus, et ne pas l'utiliser pour entraîner ses modèles. Vous pouvez consulter les engagements de chaque prestataire dans
   sa propre documentation.</p>
   <p>Ce site ne charge aucune ressource depuis un serveur tiers. Les polices de caractères sont
   hébergées avec le site, précisément pour éviter que votre adresse IP ne soit transmise à un tiers

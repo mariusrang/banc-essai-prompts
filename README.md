@@ -12,7 +12,7 @@ It runs on two n8n workflows and a Google Sheet, with a single HTML page as the 
 
 
 
-## Demo (3 min, English subtitles)
+## Demo (3 min 40, English subtitles)
 
 [![Prompt Bench demo: 66.7 % → 100 %, $203 → $72 per month](docs/demo.gif)](docs/demo.mp4)
 
@@ -22,9 +22,14 @@ If the player does not show up, [download the video](docs/demo.mp4).
 
 ## Why
 
-A prompt that works the three times you try it is not a prompt that works every time. Language models are not deterministic: at temperature 1, the same input can get a different answer on every call. Most prompts are tested by hand a few times, then shipped.
+**Companies are spending more on AI, and most can't show a return.** Enterprise spending on generative AI reached $37 billion in 2025, 3.2 times more than in 2024 ([Menlo Ventures](https://menlovc.com/perspective/2025-the-state-of-generative-ai-in-the-enterprise/)). Yet in MIT NANDA's 2025 study *The GenAI Divide*, 95 % of the organisations surveyed report zero return on it ([The Register](https://www.theregister.com/2025/08/18/generative_ai_zero_return_95_percent)). Meanwhile, the cost of a GPT-3.5-level answer fell 280-fold between November 2022 and October 2024 ([Stanford AI Index 2025](https://hai.stanford.edu/ai-index/2025-ai-index-report)): each call gets cheaper, but usage grows faster, so spending keeps rising.
 
-Cost is the other blind spot. Output tokens cost about six times more than input tokens, so a prompt that lets the model explain itself can cost several times more than it needs to. At one call that doesn't matter. At a million calls a month, it does.
+A company has three ways out. It can stop using AI and miss what comes next, or ration it and cap the value people create with it. Or it can **optimise it**, which starts with measuring.
+
+**Return on investment has two sides, and both go unmeasured.**
+
+- **Value, meaning reliability.** A prompt that works the three times you try it is not a prompt that works every time. At temperature 1, the same input can get a different answer on every call. Most prompts are tested by hand a few times, then shipped.
+- **Cost per call.** Output tokens cost about six times more than input tokens, so a prompt that lets the model explain itself can cost several times more than it needs to. At one call that doesn't matter. At a million calls a month, it does.
 
 Prompt Bench measures both before the prompt goes into production.
 
@@ -44,6 +49,8 @@ Prompt Bench measures both before the prompt goes into production.
 ## Case study: ticket triage
 
 The task: give each incoming support ticket a priority level, P1, P2 or P3. Ten real-looking tickets, each with the priority a support team would give it. Every ticket runs three times at temperature 1, scored in Judge mode.
+
+*These runs were made in September 2026 with gemini-3-flash-preview, the model the bench used at the time. The bench now runs on Groq (see [Architecture](#architecture)); rerunning the case study on another model gives different numbers.*
 
 The first prompt is the one most people would write:
 
@@ -86,11 +93,11 @@ The final prompt is three times longer, yet each test run costs 27 % less and ea
 ```mermaid
 flowchart LR
     UI["Web page<br/>index.html on GitHub Pages"]
-    subgraph n8n["n8n Cloud"]
+    subgraph n8n["n8n, self-hosted on Google Cloud"]
         RUN["Engine<br/>POST /webhook/eval-run"]
         READ["Read API<br/>GET /webhook/eval-results"]
     end
-    G["Gemini API<br/>gemini-3-flash-preview"]
+    G["Groq API<br/>openai/gpt-oss-120b"]
     S[("Google Sheet<br/>campagnes · resultats")]
 
     UI -- "1 · launch a run" --> RUN
@@ -100,13 +107,13 @@ flowchart LR
     READ -- "read" --> S
 ```
 
-**Engine** (`n8n/engine.json`, 21 nodes)
+**Engine** (`n8n/engine.json`, 22 nodes)
 
 1. A webhook receives the run. The request is validated and the run is recorded in the Sheet as *in progress*. The app gets a run id back straight away.
-2. The test plan is split into one item per call (inputs × repetitions). Each call goes to Gemini, and the output and token counts are normalised.
-3. Depending on the mode, each output goes either to an exact comparison in code or to a second Gemini call acting as judge, which returns a JSON verdict.
+2. The test plan is split into one item per call (inputs × repetitions). Each call goes to Groq, spaced out to stay within the free tier's per-minute limits, and the output and the token counts reported by the API are normalised.
+3. Depending on the mode, each output goes either to an exact comparison in code or to a second model call acting as judge, which returns a JSON verdict.
 4. Results are aggregated per input: passes, stability, distinct outputs, scores, tokens and cost. The detail is written to the `resultats` tab.
-5. A third Gemini call, the reviewer, reads the failures and returns a diagnosis, the problems, a corrected prompt and the changes. The run is updated in the `campagnes` tab with its scores, cost breakdown and analysis.
+5. After a 20-second pause that lets the per-minute token quota recover, a third model call, the reviewer, reads the failures and returns a diagnosis, the problems, a corrected prompt and the changes. The run is updated in the `campagnes` tab with its scores, cost breakdown and analysis.
 
 **Read API** (`n8n/read-api.json`, 7 nodes)
 
@@ -118,8 +125,9 @@ A single HTML file with no build step and no framework. It composes the run, pol
 
 ## How the cost is calculated
 
-- **Pricing:** gemini-3-flash-preview at $0.50 per million input tokens and $3.00 per million output tokens (Google AI for Developers pricing page, September 2026). The price is saved with each run, so old runs keep the price that applied when they ran.
-- **Token counts are estimated** from character counts rather than read from the API: 4.3 characters per token for text sent, 5.5 for generated prose and 4.1 for JSON, plus the fixed size of the judge's and reviewer's instructions. The ratios were calibrated on one run and checked on another, where the estimate came within 0.8 % of the real token count and 0.7 % of the real cost.
+- **Pricing:** every step runs on openai/gpt-oss-120b through Groq. The bench uses Groq's free tier, but shows what the prompt would cost on the paid tier: $0.15 per million input tokens and $0.60 per million output tokens (Groq model page, October 2026). The price is saved with each run, so old runs keep the price that applied when they ran: the September runs show Gemini's.
+- **Token counts come from the API.** Groq returns the exact input and output tokens of each call, reasoning tokens included, and the bench adds them up. If a call fails and returns no count, the bench falls back to an estimate from character counts (4.3 characters per token for text sent, 5.5 for generated prose, 4.1 for JSON) and the cost card says so. Those ratios were calibrated on Gemini, where they came within 1 % of the real count.
+- **Before a run**, the cost shown under the Run button is an estimate, since the length of the outputs can't be known in advance.
 - **The cost of a run** includes all three models: running the prompt, judging the outputs and the review.
 - **The production cost** only counts running the prompt. The judge and the reviewer are testing tools; you don't pay for them once the prompt is live. The monthly projection multiplies that cost per call by the volume you type in (1,000,000 by default).
 
@@ -127,17 +135,18 @@ A single HTML file with no build step and no framework. It composes the run, pol
 
 - **The judge is a model too.** Judge and Open modes are only as good as the judge. Exact mode has no such bias, so use it whenever the answer is a label.
 - **A small test set gives a noisy score.** With 10 inputs × 3 repetitions, a few points of difference can be chance. In one test, a corrected cover-letter prompt scored 94.4 % on its first run. Rerun three times, it averaged 88.9 % against 87.8 % for the original, and the two could not be told apart (p = 0.82). Rerun a version before trusting a small gain.
-- **Costs are estimates** (see above), accurate to about 1 % on the runs they were checked on.
-- **One model.** Every step uses gemini-3-flash-preview. Comparing models is not supported yet.
+- **Free tier limits.** Groq's free tier allows 30 requests and 8,000 tokens per minute, and 200,000 tokens per day. The engine spaces its calls accordingly, so a 30-call run takes 4 to 5 minutes, and about eight runs fit in a day.
+- **One model.** Every step uses openai/gpt-oss-120b. Comparing models is not supported yet.
 
 ## Run your own
 
 1. **Google Sheet.** Create a spreadsheet with two tabs:
    - `campagnes`: `Campagne ID`, `Date`, `Nom`, `Prompt`, `Mode`, `Temperature`, `Repetitions`, `Nb cas`, `Nb appels`, `Statut`, `Taux reussite`, `Cas instables`, `Latence moyenne`, `Score moyen`, `Diagnostic`, `Prompt corrige`, `Analyse`, `Tokens entree`, `Tokens sortie`, `Cout USD`, `Cout detail`
    - `resultats`: `Campagne ID`, `Cas ID`, `Entree`, `Attendu`, `Repetition`, `Sortie`, `Reussi`, `Score`, `Justification`, `Erreur`, `Tokens entree`, `Tokens sortie`
-2. **n8n.** Import `n8n/engine.json` and `n8n/read-api.json` (*Workflows → Import from file*). In every Google Sheets node, select your spreadsheet in place of `YOUR_GOOGLE_SHEET_ID`, and add your Google Sheets credential. In the three Gemini nodes, add your Google Gemini (PaLM) API credential. Publish both workflows.
-3. **Front end.** In `index.html`, set `const API` to your instance's webhook base URL (`https://<your-instance>.app.n8n.cloud/webhook`).
-4. **Hosting.** Push the repository and turn on GitHub Pages (*Settings → Pages → Deploy from a branch → main / root*).
+2. **n8n server.** Any n8n instance works. To host your own for free on Google Cloud's always-free e2-micro VM, run [`deploy/install-n8n-gcp.sh`](deploy/install-n8n-gcp.sh) in Cloud Shell: it creates the VM, a static IP, Docker, n8n and HTTPS through Caddy and sslip.io. The static IP is billed at about $3.65 a month.
+3. **Workflows.** Import `n8n/engine.json` and `n8n/read-api.json` (*Workflows → Import from file*). In every Google Sheets node, put your spreadsheet ID in place of `YOUR_GOOGLE_SHEET_ID` and add a Google Service Account credential (share the Sheet with the service account's email). Three things that can block this step: new Google Cloud accounts forbid service account keys by default (lift the `iam.disableServiceAccountKeyCreation` policy on your project); the spreadsheet must be a native Google Sheet, not an uploaded `.xlsx`; and school or work Google accounts often refuse to share with outside addresses, so keep the Sheet on a personal account. In the three Groq nodes, add a Groq credential with a free key from console.groq.com. Publish both workflows.
+4. **Front end.** In `index.html`, set `const API` to your instance's webhook base URL (`https://<your-host>/webhook`).
+5. **Hosting.** Push the repository and turn on GitHub Pages (*Settings → Pages → Deploy from a branch → main / root*).
 
 ## Repository
 
@@ -152,12 +161,13 @@ fonts/                   self-hosted fonts (no request to Google Fonts)
 llms.txt                 site summary for language models
 n8n/engine.json          evaluation engine workflow
 n8n/read-api.json        read API workflow
+deploy/                  one-command install of n8n on Google Cloud
 docs/                    demo video, GIF and screenshots
 ```
 
 ## Privacy
 
-The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine and to Google's Gemini API, and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
+The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine, which runs on a Google Cloud server in the United States, and to Groq's API, and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
 
 ## Author
 

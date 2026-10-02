@@ -145,7 +145,7 @@ h2.sh,h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);let
 .costleg .dot{width:8px;height:8px;border-radius:2px;flex:none}
 .costleg b{color:var(--graphite);font-weight:500}
 .proj{margin-top:16px;padding-top:16px;border-top:1px solid var(--frost);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:var(--slate)}
-.proj input{width:110px}
+.proj input[type=number]{width:132px}
 .projout{margin-left:auto;text-align:right}
 .projout .v{font-family:var(--display);font-size:26px;font-weight:500;color:var(--graphite);letter-spacing:-.52px;line-height:1.2}
 .projout .d{font-size:12px;color:var(--steel);max-width:44ch}
@@ -414,7 +414,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
           <button class="btn btn-violet" id="run">Run the bench</button>
           <span class="est" id="est" aria-live="polite"></span>
         </div>
-        <p class="help" style="margin-top:12px">What you submit is sent to the evaluation engine and to Google's Gemini API, and is stored. <a href="confidentialite.html">Privacy policy</a>.</p>
+        <p class="help" style="margin-top:12px">What you submit is sent to the evaluation engine and to Groq's API, and is stored. <a href="confidentialite.html">Privacy policy</a>.</p>
         <div class="err hidden" id="err" role="alert"></div>
       </div>
     </div>
@@ -452,7 +452,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
         <ul class="costleg" id="costleg"></ul>
         <div class="proj">
           <span>In production, at</span>
-          <input type="number" id="vol" value="10000" min="0" step="1000" />
+          <input type="number" id="vol" value="1000000" min="0" step="100000" />
           <span>calls per month, this prompt costs</span>
           <div class="projout" id="projout"></div>
         </div>
@@ -517,7 +517,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
 </footer>
 
 <script>
-const API = 'https://mariusrang78.app.n8n.cloud/webhook';
+const API = 'https://136-71-225-7.sslip.io/webhook';
 const $ = id => document.getElementById(id);
 const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -538,7 +538,7 @@ const SCENARIOS = {
     ]
   },
   tickets:{
-    nom:"Ticket triage — first prompt",
+    nom:"Ticket triage",
     mode:'juge',
     temp:1,
     rep:3,
@@ -577,11 +577,11 @@ let mode='exact', poll=null, timer=null, t0=0, current=null;
    systemMessage du juge, 675 pour celui du reviseur. La longueur des
    sorties, elle, ne peut pas etre connue avant de lancer : on pose une
    hypothese de SORTIE_TYPE tokens par reponse, et l ecran le dit. */
-const TARIF={modele:'gemini-3-flash-preview',in:.50,out:3};
-const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=40;
+const TARIF={modele:'openai/gpt-oss-120b',in:.15,out:.60};
+const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=120, RAISONNEMENT=80;
 const tk=s=>Math.round(String(s||'').length/R_IN);
 const usd=(i,o)=>(i*TARIF.in+o*TARIF.out)/1e6;
-const money=v=>v==null?'—':(v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
+const money=v=>v==null?'—':(v>=1000?'$'+Math.round(v).toLocaleString('en-US'):v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
 const ktok=v=>v==null?'—':(v>=1000?Math.round(v/1000)+'k':String(v));
 function estimerCampagne(prompt,cas,rep,m){
   const n=cas.length*rep; if(!n) return null;
@@ -589,7 +589,8 @@ function estimerCampagne(prompt,cas,rep,m){
   // Sans reponse attendue (mode Open), la sortie est du texte libre : ~300 tokens.
   // Avec une reponse attendue, la tache appelle une reponse courte : ~60 tokens,
   // ce qu un prompt non contraint produit typiquement en ajoutant une justification.
-  const sortieType = m==='libre' ? SORTIE_TYPE : 60;
+  // gpt-oss raisonne avant de repondre : ~80 tokens de plus par appel, factures en sortie.
+  const sortieType = (m==='libre' ? SORTIE_TYPE : 60) + RAISONNEMENT;
   const execIn=p*n+entrees, execOut=sortieType*n;
   const juge=m!=='exact';
   const jugeIn=juge?n*(SYS_JUGE+p)+entrees+execOut:0;
@@ -648,12 +649,13 @@ function loadScenario(k){
 }
 function estimate(){
   const cas=readCases(); const rep=Number($('rep').value||1); const n=cas.length*rep;
-  const k=mode==='exact'?1.2:2.4;
+  // Appels espaces pour tenir dans le quota gratuit de Groq : 2,5 s par passage, 6 s par jugement.
+  const k=mode==='exact'?2.5:8.5;
   if(!n){ $('est').textContent='Add at least one input'; }
   else{
     const e=estimerCampagne($('prompt').value,cas,rep,mode);
     $('est').textContent=n+' pass'+(n>1?'es':'')+(mode!=='exact'?' + '+n+' judgements':'')
-      +' · about '+Math.max(1,Math.round(n*k/60))+' min'
+      +' · about '+Math.max(1,Math.round((n*k+30)/60))+' min'
       +' · ~'+ktok(e.tin+e.tout)+' tokens, ~'+money(usd(e.tin,e.tout));
   }
   $('run').disabled=n===0; sideFromForm();
@@ -687,10 +689,10 @@ function fail(m){ $('err').textContent=m; $('err').classList.remove('hidden'); c
 function phase(n){ for(let i=1;i<=4;i++) $('ph'+i).className=i<n?'done':i===n?'on':''; }
 function shortId(id){ return String(id).slice(-4).toUpperCase(); }
 function watch(id,nb){
-  clearInterval(poll); let tries=0; const seuil=nb*(mode==='exact'?1.2:2.4);
+  clearInterval(poll); let tries=0; const seuil=nb*(mode==='exact'?2.5:8.5); const maxTries=Math.max(160,Math.round((seuil+180)/3));
   poll=setInterval(async()=>{ tries++; const s=(Date.now()-t0)/1000;
     if(s>seuil&&s<seuil+25) phase(3); else if(s>=seuil+25) phase(4);
-    if(tries>160){ clearInterval(poll); view('form'); fail("This run is taking unusually long. Check the Executions tab in n8n."); return; }
+    if(tries>maxTries){ clearInterval(poll); view('form'); fail("This run is taking unusually long. Check the Executions tab in n8n."); return; }
     try{ const r=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(id)+'&t='+Date.now()); const d=await r.json();
       if(d.type==='campagne'){ clearInterval(poll); clearInterval(timer); render(d); } }catch(e){}
   },3000);
