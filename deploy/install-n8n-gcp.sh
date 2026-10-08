@@ -100,8 +100,15 @@ services:
       - TZ=Europe/Paris
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_MAX_AGE=168
+      # Réglages pour tenir dans 1 Go de mémoire (e2-micro gratuite)
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=2
+      - N8N_RUNNERS_MAX_OLD_SPACE_SIZE=160
       - N8N_DIAGNOSTICS_ENABLED=false
-      - NODE_OPTIONS=--max-old-space-size=640
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - NODE_OPTIONS=--max-old-space-size=400
     volumes:
       - n8n_data:/home/node/.n8n
   caddy:
