@@ -93,31 +93,47 @@ The final prompt is three times longer, yet each test run costs 27 % less and ea
 ```mermaid
 flowchart LR
     UI["Web page<br/>index.html on GitHub Pages"]
-    subgraph n8n["n8n, self-hosted on Google Cloud"]
+    TG["Telegram<br/>/test · /status"]
+    subgraph n8n["n8n"]
         RUN["Engine<br/>POST /webhook/eval-run"]
+        BOT["Telegram bot<br/>Switch on the command"]
+        SUB["Sub-workflow<br/>run a campaign"]
         READ["Read API<br/>GET /webhook/eval-results"]
+        ERR["Error workflow<br/>Error Trigger"]
     end
     G["Groq API<br/>openai/gpt-oss-120b"]
-    S[("Google Sheet<br/>campagnes · resultats")]
+    S[("Google Sheet<br/>campagnes · resultats · erreurs")]
 
     UI -- "1 · launch a run" --> RUN
-    RUN -- "run, judge, review" --> G
-    RUN -- "write" --> S
+    TG -- "message" --> BOT
+    RUN -- "campaign" --> SUB
+    BOT -- "campaign" --> SUB
+    SUB -- "run, judge, review" --> G
+    SUB -- "write" --> S
+    SUB -- "summary" --> BOT
+    BOT -- "results" --> TG
     UI -- "2 · poll every 3 s" --> READ
     READ -- "read" --> S
+    RUN -. "on failure" .-> ERR
+    BOT -. "on failure" .-> ERR
+    ERR -- "log, mark failed" --> S
+    ERR -- "alert" --> TG
 ```
 
-**Engine** (`n8n/engine.json`, 22 nodes)
+**Engine** (`n8n/engine.json`, 6 nodes): the web entry point. A webhook receives the run, an If rejects a request with no prompt or no case (HTTP 400), a Code node expands it into one call per input × repetition, and the app gets a run id back straight away (HTTP 202). The work itself is handed to the sub-workflow.
 
-1. A webhook receives the run. The request is validated and the run is recorded in the Sheet as *in progress*. The app gets a run id back straight away.
-2. The test plan is split into one item per call (inputs × repetitions). Each call goes to Groq, spaced out to stay within the free tier's per-minute limits, and the output and the token counts reported by the API are normalised.
-3. Depending on the mode, each output goes either to an exact comparison in code or to a second model call acting as judge, which returns a JSON verdict.
-4. Results are aggregated per input: passes, stability, distinct outputs, scores, tokens and cost. The detail is written to the `resultats` tab.
-5. After a 20-second pause that lets the per-minute token quota recover, a third model call, the reviewer, reads the failures and returns a diagnosis, the problems, a corrected prompt and the changes. The run is updated in the `campagnes` tab with its scores, cost breakdown and analysis.
+**Telegram bot** (`n8n/telegram-bot.json`, 14 nodes): the message entry point, restricted to one chat. A Switch routes the command. `/test` followed by a prompt and `cases:` (`input => expected`, one per line) is parsed, validated by an If, run through the same sub-workflow, and the pass rate, cost, diagnosis and fixed prompt come back in the chat. `/status` lists the last five runs from the Sheet. Anything else gets the usage message, with no model call.
 
-**Read API** (`n8n/read-api.json`, 7 nodes)
+**Run a campaign** (`n8n/run-campaign-subworkflow.json`, 19 nodes): the shared sub-workflow called by both entry points.
 
-A GET webhook with two uses. Without a parameter, it returns the list of runs for the history screen. With `campagneId`, it returns one run with its per-input statistics and every call. It answers with one of three types (`introuvable`, `en cours`, `campagne`), so the page knows whether to keep polling.
+1. The run is recorded in the Sheet as *in progress* and the test plan is split into one item per call. Each call goes to Groq, spaced out to stay within the free tier's per-minute limits, with 5 retries 5 s apart, and the output and token counts are normalised.
+2. A Switch on the scoring mode sends each output to an exact comparison in code (*exact*), or to a second model call acting as judge against the expected answer (*judge*) or against the instruction itself (*open*).
+3. Results are aggregated per input: passes, stability, distinct outputs, scores, tokens and cost. The detail is written to the `resultats` tab.
+4. After a 20-second pause that lets the per-minute token quota recover, the reviewer reads the failures and returns a diagnosis, a corrected prompt and the changes. The run is updated in `campagnes`, and a summary is returned to the caller.
+
+**Read API** (`n8n/read-api.json`, 7 nodes): a GET webhook. Without a parameter, it returns the list of runs; with `campagneId`, one run with its per-input statistics and every call. It answers `introuvable`, `en cours`, `erreur` or `campagne`, so the page knows whether to keep polling. A run still in progress after 35 minutes is reported as failed (the server stopped mid-run).
+
+**Error workflow** (`n8n/error-handler.json`, 8 nodes): set as the error workflow of the engine and the bot. On any production failure it logs the workflow, node, message and execution link to the `erreurs` tab, sends a Telegram alert, and marks the interrupted run as `erreur` so the page stops waiting and shows the cause.
 
 **Front end** (`index.html`)
 
@@ -143,8 +159,9 @@ A single HTML file with no build step and no framework. It composes the run, pol
 1. **Google Sheet.** Create a spreadsheet with two tabs:
    - `campagnes`: `Campagne ID`, `Date`, `Nom`, `Prompt`, `Mode`, `Temperature`, `Repetitions`, `Nb cas`, `Nb appels`, `Statut`, `Taux reussite`, `Cas instables`, `Latence moyenne`, `Score moyen`, `Diagnostic`, `Prompt corrige`, `Analyse`, `Tokens entree`, `Tokens sortie`, `Cout USD`, `Cout detail`
    - `resultats`: `Campagne ID`, `Cas ID`, `Entree`, `Attendu`, `Repetition`, `Sortie`, `Reussi`, `Score`, `Justification`, `Erreur`, `Tokens entree`, `Tokens sortie`
+   - `erreurs`: leave it empty, the error workflow writes its own headers
 2. **n8n server.** Any n8n instance works. To host your own for free on Google Cloud's always-free e2-micro VM, run [`deploy/install-n8n-gcp.sh`](deploy/install-n8n-gcp.sh) in Cloud Shell: it creates the VM, a static IP, Docker, n8n and HTTPS through Caddy and sslip.io. The static IP is billed at about $3.65 a month.
-3. **Workflows.** Import `n8n/engine.json` and `n8n/read-api.json` (*Workflows → Import from file*). In every Google Sheets node, put your spreadsheet ID in place of `YOUR_GOOGLE_SHEET_ID` and add a Google Service Account credential (share the Sheet with the service account's email). Three things that can block this step: new Google Cloud accounts forbid service account keys by default (lift the `iam.disableServiceAccountKeyCreation` policy on your project); the spreadsheet must be a native Google Sheet, not an uploaded `.xlsx`; and school or work Google accounts often refuse to share with outside addresses, so keep the Sheet on a personal account. In the three Groq nodes, add a Groq credential with a free key from console.groq.com. Publish both workflows.
+3. **Workflows.** Import the five files of `n8n/` (*Workflows → Import from file*), the sub-workflow first. Then replace the placeholders: `YOUR_GOOGLE_SHEET_ID` in every Google Sheets node, `YOUR_SUBWORKFLOW_ID` in the two *Executer la campagne* nodes, `YOUR_TELEGRAM_CHAT_ID` in the bot trigger and the alert, and the engine and bot ids in the error workflow's If. Add the credentials: a Google Service Account (share the Sheet with its email), a Groq key from console.groq.com, and a Telegram bot token from @BotFather. Publish the error workflow first, set it as the error workflow of the engine and the bot (*Settings → Error workflow*), then publish everything.
 4. **Front end.** In `index.html`, set `const API` to your instance's webhook base URL (`https://<your-host>/webhook`).
 5. **Hosting.** Push the repository and turn on GitHub Pages (*Settings → Pages → Deploy from a branch → main / root*).
 
@@ -159,15 +176,18 @@ conditions.html          terms of use
 legal.css                styles for the legal pages
 fonts/                   self-hosted fonts (no request to Google Fonts)
 llms.txt                 site summary for language models
-n8n/engine.json          evaluation engine workflow
-n8n/read-api.json        read API workflow
+n8n/engine.json                    web entry point (webhook)
+n8n/telegram-bot.json              Telegram entry point (/test, /status)
+n8n/run-campaign-subworkflow.json  shared sub-workflow that runs a campaign
+n8n/read-api.json                  read API workflow
+n8n/error-handler.json             error workflow (log, alert, mark failed)
 deploy/                  one-command install of n8n on Google Cloud
 docs/                    demo video, GIF and screenshots
 ```
 
 ## Privacy
 
-The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine, which runs on a Google Cloud server in the United States, and to Groq's API, and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
+The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine and to Groq's API, and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
 
 ## Author
 

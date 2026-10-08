@@ -694,7 +694,8 @@ function watch(id,nb){
     if(s>seuil&&s<seuil+25) phase(3); else if(s>=seuil+25) phase(4);
     if(tries>maxTries){ clearInterval(poll); view('form'); fail("This run is taking unusually long. Check the Executions tab in n8n."); return; }
     try{ const r=await fetch(API+'/eval-results?campagneId='+encodeURIComponent(id)+'&t='+Date.now()); const d=await r.json();
-      if(d.type==='campagne'){ clearInterval(poll); clearInterval(timer); render(d); } }catch(e){}
+      if(d.type==='campagne'){ clearInterval(poll); clearInterval(timer); render(d); }
+      else if(d.type==='erreur'){ clearInterval(poll); view('form'); fail("The run failed: "+(d.erreur||'unknown error')); } }catch(e){}
   },3000);
 }
 
