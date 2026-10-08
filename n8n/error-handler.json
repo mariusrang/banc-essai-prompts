@@ -1,0 +1,391 @@
+{
+  "name": "Banc eval - gestion des erreurs",
+  "nodes": [
+    {
+      "id": "03ca16a6-4900-4b74-9c0a-f801670ddc22",
+      "name": "Quand un workflow plante",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fe20bf7c-00c7-400b-ac2e-5a77a160018b",
+      "name": "Decrire l erreur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// L Error Trigger recoit l execution qui a plante et le workflow concerne.\n// On en tire une ligne lisible : ou, quoi, et le lien vers l execution.\nconst e = $input.first().json;\nconst ex = e.execution || {};\nconst err = ex.error || (e.trigger && e.trigger.error) || {};\nconst wf = e.workflow || {};\nreturn [{ json: {\n  date: $now.toISO(),\n  workflowId: String(wf.id || ''),\n  workflow: String(wf.name || ''),\n  noeud: String(ex.lastNodeExecuted || (err.node && err.node.name) || ''),\n  message: String(err.message || 'Unknown error').slice(0, 500),\n  executionId: String(ex.id || ''),\n  lien: String(ex.url || '')\n} }];"
+      }
+    },
+    {
+      "id": "cf34bb87-0f92-417a-87fc-a879c2fce002",
+      "name": "Journaliser l erreur",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "erreurs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.date }}",
+            "Workflow": "={{ $json.workflow }}",
+            "Noeud": "={{ $json.noeud }}",
+            "Message": "={{ $json.message }}",
+            "Execution": "={{ $json.executionId }}",
+            "Lien": "={{ $json.lien }}"
+          },
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Workflow",
+              "displayName": "Workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Noeud",
+              "displayName": "Noeud",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Execution",
+              "displayName": "Execution",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lien",
+              "displayName": "Lien",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "92cfffc8-a79f-490a-8fab-9c13d20033b9",
+      "name": "Une campagne a plante ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ ['YOUR_ENGINE_WORKFLOW_ID', 'YOUR_BOT_WORKFLOW_ID'].includes($('Decrire l erreur').first().json.workflowId) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "9eb66acd-9252-406f-b079-1e03fb91fdd5",
+      "name": "Lire les campagnes en cours",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        200
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campagnes"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Statut",
+              "lookupValue": "en cours"
+            }
+          ]
+        },
+        "options": {
+          "returnAllMatches": "returnAllMatches"
+        }
+      }
+    },
+    {
+      "id": "f61e2900-73f5-40bf-9425-9eeec4f09bdf",
+      "name": "Campagnes interrompues",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Le moteur a plante : la campagne qu il traitait est restee \"en cours\"\n// et la page web attendrait indefiniment. On retient les campagnes en cours\n// lancees dans les 45 dernieres minutes (le moteur a un timeout de 30 min)\n// et on les passe en \"erreur\" avec la cause.\nconst err = $('Decrire l erreur').first().json;\nconst maintenant = Date.now();\nconst FENETRE_MS = 45 * 60 * 1000;\nreturn $input.all()\n  .filter(i => i.json['Campagne ID'])\n  .filter(i => { const d = Date.parse(i.json['Date']); return isNaN(d) || maintenant - d < FENETRE_MS; })\n  .map(i => ({ json: {\n    campagneId: i.json['Campagne ID'],\n    diagnostic: 'The run stopped on an error' + (err.noeud ? ' in the node \"' + err.noeud + '\"' : '') + ': ' + err.message\n  } }));"
+      }
+    },
+    {
+      "id": "ee763741-7199-4673-bbc8-f95edeefcd88",
+      "name": "Marquer la campagne en erreur",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        200
+      ],
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campagnes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "Campagne ID"
+          ],
+          "value": {
+            "Campagne ID": "={{ $json.campagneId }}",
+            "Statut": "erreur",
+            "Diagnostic": "={{ $json.diagnostic }}"
+          },
+          "schema": [
+            {
+              "id": "Campagne ID",
+              "displayName": "Campagne ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Statut",
+              "displayName": "Statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Diagnostic",
+              "displayName": "Diagnostic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "a1c3d2e4-5f60-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Note gestion des erreurs",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -120
+      ],
+      "parameters": {
+        "content": "## Gestion des erreurs\n\nBranche comme **Error Workflow** du moteur (site) et du bot Telegram. Des qu une execution de production plante, n8n lance ce workflow.\n\n1. L erreur est journalisee dans l onglet **erreurs** du Google Sheet.\n2. Une alerte part sur Telegram.\n3. Si une campagne etait en cours, elle passe en **erreur** avec la cause : la page web arrete d attendre et l affiche.\n\nEn amont : 5 tentatives espacees de 5 s sur chaque appel Groq, timeout de 30 min, et l API de lecture declare en erreur toute campagne en cours depuis plus de 35 min.",
+        "height": 300,
+        "width": 520,
+        "color": 3
+      }
+    },
+    {
+      "id": "f92f6c3f-e036-4c40-a83e-cd006ecdab26",
+      "name": "Alerter sur Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=⚠️ <b>Prompt Bench error</b>\nWorkflow: {{ $('Decrire l erreur').first().json.workflow.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\nNode: {{ $('Decrire l erreur').first().json.noeud.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\n{{ $('Decrire l erreur').first().json.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\n\nLogged in the erreurs tab of the Google Sheet.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Quand un workflow plante": {
+      "main": [
+        [
+          {
+            "node": "Decrire l erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decrire l erreur": {
+      "main": [
+        [
+          {
+            "node": "Journaliser l erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journaliser l erreur": {
+      "main": [
+        [
+          {
+            "node": "Une campagne a plante ?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alerter sur Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les campagnes en cours": {
+      "main": [
+        [
+          {
+            "node": "Campagnes interrompues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campagnes interrompues": {
+      "main": [
+        [
+          {
+            "node": "Marquer la campagne en erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Une campagne a plante ?": {
+      "main": [
+        [
+          {
+            "node": "Lire les campagnes en cours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

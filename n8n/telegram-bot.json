@@ -1,0 +1,516 @@
+{
+  "name": "Banc eval - bot Telegram",
+  "nodes": [
+    {
+      "id": "2832987c-1739-4368-b15d-205e2321fbed",
+      "name": "Message recu",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "chatIds": "YOUR_TELEGRAM_CHAT_ID"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "ecbd1961-d459-46ea-8907-55b1a839b4e9",
+      "name": "Router la commande",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "test",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ((($json.message && $json.message.text) || '').trim().split(/\\s+/)[0] || '').split('@')[0].toLowerCase() }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "/test"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "status",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ((($json.message && $json.message.text) || '').trim().split(/\\s+/)[0] || '').split('@')[0].toLowerCase() }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "/status"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "other"
+        }
+      },
+      "notes": "Une seule entree Telegram, trois chemins : /test lance une campagne, /status lit l historique, tout le reste recoit le mode d emploi."
+    },
+    {
+      "id": "38d96975-1b6d-4bbf-b73f-f922c2a23f77",
+      "name": "Analyser le /test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Lit un message /test et en fait une campagne prete pour le sous-workflow.\n// Format attendu (une ligne par cas, attendu facultatif en mode open) :\n//   /test [exact|judge|open]\n//   <le prompt, sur une ou plusieurs lignes>\n//   cases:\n//   entree => attendu\nconst msg = $('Message recu').first().json.message || {};\nconst chatId = msg.chat ? msg.chat.id : null;\nconst lignes = String(msg.text || '').replace(/\\r/g, '').split('\\n');\nconst tete = lignes[0].trim().split(/\\s+/);\nconst ALIAS = { exact: 'exact', judge: 'juge', juge: 'juge', open: 'libre', libre: 'libre' };\nlet mode = ALIAS[(tete[1] || '').toLowerCase()] || '';\n\nconst reste = lignes.slice(1);\nconst iCas = reste.findIndex(l => /^\\s*(cases?|cas)\\s*:/i.test(l));\nconst lignesPrompt = iCas === -1 ? reste : reste.slice(0, iCas);\nconst prompt = lignesPrompt.join('\\n').replace(/^\\s*prompt\\s*:\\s*/i, '').trim();\nconst cas = (iCas === -1 ? [] : reste.slice(iCas + 1))\n  .map(l => l.trim()).filter(Boolean)\n  .map(l => { const k = l.indexOf('=>'); return k === -1 ? { entree: l, attendu: '' } : { entree: l.slice(0, k).trim(), attendu: l.slice(k + 2).trim() }; })\n  .filter(c => c.entree);\n\nif (!mode) mode = cas.length && cas.every(c => c.attendu) ? 'exact' : 'libre';\n\nconst MAX_CAS = 8;\nlet erreur = '';\nif (!prompt) erreur = 'Your message has no prompt.';\nelse if (!cas.length) erreur = 'Your message has no test case. Add a line \"cases:\" followed by one case per line.';\nelse if (cas.length > MAX_CAS) erreur = 'At most ' + MAX_CAS + ' cases per run from Telegram (free Groq quota). Use the website for bigger runs.';\nelse if (mode !== 'libre' && cas.some(c => !c.attendu)) erreur = 'With exact or judge scoring, every case needs an expected answer: input => expected.';\n\nconst repetitions = 3;\nconst temperature = 0.7;\nconst campagneId = 'camp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);\nconst runs = [];\nif (!erreur) cas.forEach((c, i) => {\n  for (let r = 1; r <= repetitions; r++) {\n    runs.push({ campagneId, casId: 'cas_' + (i + 1), entree: c.entree, attendu: mode === 'libre' ? '' : c.attendu, repetition: r, mode, prompt, temperature });\n  }\n});\n// Duree estimee : espacement des appels (2,5 s execution, 6 s juge) + pause et reviseur.\nconst secondes = runs.length * (mode === 'exact' ? 2.5 : 8.5) + 45;\n\nreturn [{ json: {\n  valide: !erreur,\n  erreur,\n  chatId,\n  campagneId,\n  nom: 'Telegram: ' + prompt.split('\\n')[0].slice(0, 50),\n  prompt,\n  mode,\n  temperature,\n  repetitions,\n  nbCas: cas.length,\n  nbAppels: runs.length,\n  minutes: Math.max(1, Math.round(secondes / 60)),\n  runs\n} }];\n"
+      }
+    },
+    {
+      "id": "1e215be9-d3fb-470b-8d80-5d2c1b1d2b01",
+      "name": "Format valide ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valide }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "13c3c38d-027d-4c45-8f60-c2e991a2a4af",
+      "name": "Annoncer le lancement",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "=⏳ Run started: {{ $json.nbCas }} case(s) × {{ $json.repetitions }} repetitions = {{ $json.nbAppels }} calls, about {{ $json.minutes }} min. I will send the results here.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "3da0cbe3-3739-4c46-b30b-21a9be2081fe",
+      "name": "Reprendre la campagne",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Le message Telegram a remplace l item : on repart de la campagne preparee.\nreturn [$('Analyser le /test').first()];"
+      }
+    },
+    {
+      "id": "94976e5b-8f65-4d26-bb84-a49201ce884c",
+      "name": "Executer la campagne",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_SUBWORKFLOW_ID",
+          "cachedResultName": "Banc eval - executer une campagne (sous-workflow)"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "ec3886a0-55e8-40df-bcf3-4dad3b7d2e89",
+      "name": "Formater le resultat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Met en forme le resume renvoye par le sous-workflow pour Telegram (HTML).\nconst r = $input.first().json;\nconst chatId = $('Analyser le /test').first().json.chatId;\nconst esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst tronc = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '…' : s; };\nconst MODE = { exact: 'exact', juge: 'judge', libre: 'open' };\nconst ICONE = { reussi: '✅', instable: '⚠️', echec: '❌' };\n\nconst lignes = [];\nlignes.push('<b>Prompt Bench, run ' + esc(String(r.campagneId || '').slice(-4).toUpperCase()) + '</b> (' + (MODE[r.mode] || r.mode) + ' scoring)');\nlignes.push('Pass rate: <b>' + r.tauxReussite + ' %</b> (' + r.totalReussites + '/' + r.totalAppels + ' calls)');\nlignes.push('Unstable cases: ' + r.casInstables + ' · Failing cases: ' + r.casEchoues);\nif (typeof r.coutParAppel === 'number') lignes.push('Cost of one production call: $' + r.coutParAppel.toFixed(6) + (r.coutEstime ? ' (estimated)' : ''));\nlignes.push('');\n(r.cas || []).forEach(c => lignes.push((ICONE[c.statut] || '•') + ' ' + esc(tronc(c.entree, 60)) + ': ' + c.reussites + '/' + c.total));\nif (r.diagnostic) { lignes.push(''); lignes.push('<b>Diagnosis</b>'); lignes.push(esc(tronc(r.diagnostic, 700))); }\nlet texte = lignes.join('\\n');\nif (r.promptCorrige) {\n  const reste = 3900 - texte.length - 60;\n  texte += '\\n\\n<b>Fixed prompt</b>\\n<pre>' + esc(tronc(r.promptCorrige, Math.max(200, reste))) + '</pre>';\n}\nreturn [{ json: { chatId, texte } }];\n"
+      }
+    },
+    {
+      "id": "c013c7be-98f0-4afc-b17d-5c08e72de6e4",
+      "name": "Envoyer le resultat",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "48bd361c-d9e8-4dab-996d-f3fb5c5b52a2",
+      "name": "Expliquer le format",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        200
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.erreur.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\n\n<b>Prompt Bench bot</b>\nTest a prompt from Telegram: each case runs 3 times, every answer is scored, and you get the pass rate, the cost of one call and a fixed prompt.\n\n<b>/test</b> [exact | judge | open]\nyour prompt (one or more lines)\ncases:\ninput =&gt; expected answer\ninput =&gt; expected answer\n\nexact: the answer must match word for word. judge: a model checks it means the same. open: no expected answer, the model checks the output against your prompt.\n\n<b>/status</b>: your last 5 runs\n\nExample:\n<pre>/test judge\nClassify the support ticket as billing, bug or other. Answer with one word.\ncases:\nI was charged twice =&gt; billing\nThe app crashes on login =&gt; bug</pre>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "8236a7b0-08d7-463f-9db1-81c97e9746b6",
+      "name": "Lire les campagnes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        340
+      ],
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "campagnes"
+        },
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "id": "5db6ebad-7af4-4b3b-8d4a-1ab88ff9e9e4",
+      "name": "Dernieres campagnes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        340
+      ],
+      "parameters": {
+        "jsCode": "// Les cinq dernieres campagnes, lues dans l onglet campagnes du Google Sheet.\nconst chatId = $('Message recu').first().json.message.chat.id;\nconst esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst STATUT = { termine: '✅ done', 'en cours': '⏳ running', erreur: '❌ error' };\nconst lignes = $input.all().map(i => i.json).filter(c => c['Campagne ID']).slice(-5).reverse();\nlet texte;\nif (!lignes.length) {\n  texte = 'No run yet. Send /test to start one.';\n} else {\n  texte = '<b>Last ' + lignes.length + ' runs</b>\\n\\n' + lignes.map(c => {\n    const date = String(c['Date'] || '').slice(0, 16).replace('T', ' ');\n    const taux = c['Taux reussite'] !== '' && c['Taux reussite'] != null ? ' · ' + c['Taux reussite'] + ' %' : '';\n    return (STATUT[c['Statut']] || esc(c['Statut'])) + taux + '\\n' + esc(String(c['Nom'] || '').slice(0, 60)) + ' · ' + date;\n  }).join('\\n\\n');\n}\nreturn [{ json: { chatId, texte } }];\n"
+      }
+    },
+    {
+      "id": "45596fba-27a2-4284-9267-e27a177d7120",
+      "name": "Envoyer le statut",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        340
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "46e5828a-936d-4b91-b009-04b86db7624d",
+      "name": "Mode d emploi",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        540
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "<b>Prompt Bench bot</b>\nTest a prompt from Telegram: each case runs 3 times, every answer is scored, and you get the pass rate, the cost of one call and a fixed prompt.\n\n<b>/test</b> [exact | judge | open]\nyour prompt (one or more lines)\ncases:\ninput =&gt; expected answer\ninput =&gt; expected answer\n\nexact: the answer must match word for word. judge: a model checks it means the same. open: no expected answer, the model checks the output against your prompt.\n\n<b>/status</b>: your last 5 runs\n\nExample:\n<pre>/test judge\nClassify the support ticket as billing, bug or other. Answer with one word.\ncases:\nI was charged twice =&gt; billing\nThe app crashes on login =&gt; bug</pre>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Prompt Bench Bot"
+        }
+      }
+    },
+    {
+      "id": "de9a2946-ac87-4746-931b-91be1a56f487",
+      "name": "Note bot Telegram",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -260
+      ],
+      "parameters": {
+        "content": "## Bot Telegram : la porte d entree message\n\nRestreint a ton chat (filtre du trigger). Le Switch aiguille la commande :\n\n- **/test** : le message est analyse (prompt, cas, mode), valide par un IF, puis la campagne est lancee via le meme sous-workflow que le site. Le resultat revient dans le chat.\n- **/status** : les 5 dernieres campagnes, lues dans Google Sheets.\n- tout le reste : le mode d emploi, sans aucun appel au modele.",
+        "height": 240,
+        "width": 560,
+        "color": 4
+      }
+    }
+  ],
+  "connections": {
+    "Message recu": {
+      "main": [
+        [
+          {
+            "node": "Router la commande",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router la commande": {
+      "main": [
+        [
+          {
+            "node": "Analyser le /test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lire les campagnes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mode d emploi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyser le /test": {
+      "main": [
+        [
+          {
+            "node": "Format valide ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format valide ?": {
+      "main": [
+        [
+          {
+            "node": "Annoncer le lancement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Expliquer le format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Annoncer le lancement": {
+      "main": [
+        [
+          {
+            "node": "Reprendre la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reprendre la campagne": {
+      "main": [
+        [
+          {
+            "node": "Executer la campagne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executer la campagne": {
+      "main": [
+        [
+          {
+            "node": "Formater le resultat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formater le resultat": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le resultat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire les campagnes": {
+      "main": [
+        [
+          {
+            "node": "Dernieres campagnes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dernieres campagnes": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le statut",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800,
+    "errorWorkflow": "YOUR_ERROR_WORKFLOW_ID"
+  }
+}
