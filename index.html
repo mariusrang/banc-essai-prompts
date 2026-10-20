@@ -137,6 +137,13 @@ h2.sh,h3{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--graphite);let
 /* ---------- cost ---------- */
 .costhead{display:flex;align-items:baseline;gap:10px;margin-top:6px}
 .costhead .v{font-family:var(--display);font-size:32px;font-weight:600;color:var(--graphite);letter-spacing:-.64px;line-height:1.1}
+.delta{display:flex;flex-wrap:wrap;align-items:center;gap:12px 28px;margin-bottom:16px;background:var(--lilac-soft);border-color:var(--lilac)}
+.delta .dl{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--violet-ink);width:100%}
+.delta .dv{display:flex;align-items:baseline;gap:10px;font-size:15px;color:var(--slate)}
+.delta .dv b{font-size:28px;font-weight:600;color:var(--onyx);letter-spacing:-.5px}
+.delta .dv .ar{color:var(--violet);font-size:20px}
+.delta .gain{font-size:13px;font-weight:600;border-radius:999px;padding:4px 10px;background:var(--ok-bg);color:var(--ok)}
+.delta .gain.neg{background:var(--bad-bg);color:var(--bad)}
 .costhead .t{font-size:13px;color:var(--steel)}
 .cost .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--frost);margin:14px 0 12px}
 .cost .bar i{display:block;height:100%}
@@ -379,8 +386,8 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
           <label class="f" for="prompt">Prompt</label>
           <textarea id="prompt" placeholder="The prompt under test. It is sent as the system instruction."></textarea>
           <div class="chips">
-            <button data-scen="letter" aria-pressed="true">Cover letters</button>
-            <button data-scen="tickets" aria-pressed="false">Ticket triage</button>
+            <button data-scen="tickets" aria-pressed="true">Ticket triage</button>
+            <button data-scen="letter" aria-pressed="false">Cover letters</button>
           </div>
           <p class="help">Loading a scenario replaces the prompt, the inputs and the conditions.</p>
         </div>
@@ -444,6 +451,8 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
       <p class="sub" id="r-sub"></p>
 
       <div class="stats" id="stats"></div>
+
+      <div class="card delta hidden" id="delta" aria-live="polite"></div>
 
       <div class="card cost hidden" id="cost">
         <div class="eyebrow"><h2 class="sh" style="margin:0">What this run cost</h2><span class="lab" id="tarif"></span></div>
@@ -539,20 +548,16 @@ const SCENARIOS = {
   },
   tickets:{
     nom:"Ticket triage",
-    mode:'juge',
-    temp:1,
+    mode:'exact',
+    temp:0.7,
     rep:3,
     texte:"You triage incoming support tickets for our routing system. Give each ticket its priority level: P1, P2 or P3.",
     cas:[
       ["Our production API has been returning 500s for twenty minutes. Every customer request is failing.","p1"],
-      ["The webhook fires twice for every event and our database is filling up with duplicate rows.","p1"],
       ["The CSV export still works but takes about forty seconds instead of five.","p2"],
-      ["We were charged for 25 seats instead of the 20 on our contract, roughly 200 euros too much.","p2"],
       ["Do you offer a student discount for a class of thirty people?","p3"],
       ["Nobody on my team can log in since the update on Monday. We are completely blocked.","p1"],
       ["Invoice 4412 carries the wrong VAT number and our accountant has rejected it.","p2"],
-      ["The link to your documentation returns a 404 from the pricing page.","p3"],
-      ["The payment page crashes for every customer, nobody can subscribe right now.","p1"],
       ["Could you add a dark mode to the dashboard at some point?","p3"]
     ]
   }
@@ -719,6 +724,7 @@ function render(d){
   st+=stat('Unstable cases',inst,inst?'warn':'')+stat('Always wrong',ech,ech?'bad':'')+stat('Passes',c.nbAppels,'');
   $('stats').innerHTML=st;
   renderCout(c);
+  renderDelta(c);
 
   $('rows').innerHTML=(c.resultatsManquants?'<tr><td colspan="5" style="padding:14px 0"><div class="err">The campaign finished but no per-case rows were written. This usually means a column is missing in the <span class="mono">resultats</span> sheet (check that it has a <span class="mono">Score</span> column), or the workflow was not republished after the last change.</div></td></tr>':'')+d.cas.map((cas,i)=>{
     const runs=(byCase[cas.casId]||[]).sort((a,b)=>a.repetition-b.repetition);
@@ -752,7 +758,7 @@ function render(d){
     $('probs').innerHTML=(c.problemes||[]).map(p=>'<li><span class="n">'+esc(caseLetter(d,p.cas))+'</span>'+esc(p.observation||'')+(p.cause?'<span class="why">'+esc(p.cause)+'</span>':'')+'</li>').join('');
     $('pc').textContent=c.promptCorrige;
     $('chg').innerHTML=(c.changements||[]).map(x=>'<li><b>'+esc(x.quoi||'')+'</b><span>'+esc(x.pourquoi||'')+'</span></li>').join('')||'<li><span>No change proposed.</span></li>';
-    $('apply').onclick=()=>{ $('prompt').value=c.promptCorrige; const base=c.nom.replace(/\s·\sv\d+$/,''); const m=c.nom.match(/v(\d+)$/); $('nom').value=base+' · v'+(m?Number(m[1])+1:2); if(c.mode) setMode(c.mode); run(c.promptCorrige,$('nom').value); };
+    $('apply').onclick=()=>{ prevRun=c; $('prompt').value=c.promptCorrige; const base=c.nom.replace(/\s·\sv\d+$/,''); const m=c.nom.match(/v(\d+)$/); $('nom').value=base+' · v'+(m?Number(m[1])+1:2); if(c.mode) setMode(c.mode); run(c.promptCorrige,$('nom').value); };
     $('copy').onclick=()=>{ navigator.clipboard.writeText(c.promptCorrige); $('copy').textContent='Copied'; setTimeout(()=>$('copy').textContent='Copy prompt',1500); };
     $('corr').classList.remove('hidden');
   } else $('corr').classList.add('hidden');
@@ -776,12 +782,32 @@ function renderCout(c){
   $('tarif').textContent=(co.modele||TARIF.modele)+' · $'+co.prixIn+'/M in · $'+co.prixOut+'/M out'+(co.estime?' · token counts estimated':'');
   projeter(c); $('cost').classList.remove('hidden');
 }
+/* before / after: compares a "· vN" run with the version it was fixed from */
+let prevRun=null, archCache=[];
+function baseName(n){ return String(n||'').replace(/\s·\sv\d+$/,''); }
+function renderDelta(c){
+  const box=$('delta'); box.classList.add('hidden');
+  try{
+    const m=String(c.nom||'').match(/\s·\sv(\d+)$/); if(!m) return;
+    const n=Number(m[1]), base=baseName(c.nom), want=n>2?base+' · v'+(n-1):base;
+    let p=(prevRun&&prevRun.campagneId!==c.campagneId&&baseName(prevRun.nom)===base)?prevRun:null;
+    if(!p) p=archCache.find(x=>x.nom===want&&x.campagneId!==c.campagneId)||null;
+    if(!p||p.tauxReussite==null) return;
+    const d=Math.round((c.tauxReussite-p.tauxReussite)*10)/10;
+    const u0=p.cout&&p.cout.parAppelProduction, u1=c.cout&&c.cout.parAppelProduction;
+    box.innerHTML='<span class="dl">Before and after the reviewer\'s fix</span>'
+      +'<span class="dv">Pass rate <b>'+p.tauxReussite+'%</b><span class="ar">→</span><b>'+c.tauxReussite+'%</b></span>'
+      +'<span class="gain'+(d<0?' neg':'')+'">'+(d>=0?'+':'')+d+' points</span>'
+      +(u0!=null&&u1!=null?'<span class="dv">Cost per 1,000 calls <b style="font-size:20px">'+money(u0*1000)+'</b><span class="ar">→</span><b style="font-size:20px">'+money(u1*1000)+'</b></span>':'');
+    box.classList.remove('hidden');
+  }catch(e){}
+}
 function projeter(c){
   const u=c&&c.cout?c.cout.parAppelProduction:null;
   if(u==null){ $('projout').innerHTML=''; return; }
   const v=Math.max(0,Number($('vol').value)||0);
   $('projout').innerHTML='<div class="v">'+money(u*v)+' / month</div>'
-    +'<div class="d">'+money(u)+' per call. Execution only: the judge and the reviewer are test tooling, you do not pay for them in production.</div>';
+    +'<div class="d">'+money(u*1000)+' per 1,000 calls. Execution only: the judge and the reviewer are test tooling, you do not pay for them in production.</div>';
 }
 function caseLetter(d,casId){ const i=d.cas.findIndex(x=>x.casId===casId); return i>=0?(L[i]||i+1):(casId||''); }
 function tronc(s,n){ s=String(s==null?'':s); return s.length>n?s.slice(0,n-1)+'…':s; }
@@ -793,6 +819,7 @@ async function archives(){
   try{
     const r=await fetch(API+'/eval-results?t='+Date.now()); const d=await r.json();
     const done=(d.campagnes||[]).filter(c=>c.statut==='termine'&&c.tauxReussite!=null);
+    archCache=done;
     if(!done.length){ $('arch-empty').classList.remove('hidden'); return; }
     $('arch').innerHTML=done.map(c=>'<tr class="row" data-id="'+c.campagneId+'"><td class="l">'+shortId(c.campagneId)+'</td><td class="q">'+esc(c.nom)+'</td><td class="sc"><span class="badge">'+esc(MODE_LABEL[c.mode]||c.mode)+'</span></td>'+
       '<td class="r pr" style="font-weight:500">'+c.tauxReussite+' %'+(c.scoreMoyen!=null?' <span style="color:var(--steel);font-weight:400">· '+c.scoreMoyen+'/10</span>':'')+'</td>'+
