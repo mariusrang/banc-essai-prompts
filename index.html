@@ -548,15 +548,16 @@ const SCENARIOS = {
   },
   tickets:{
     nom:"Ticket triage",
-    mode:'exact',
+    mode:'juge',
     temp:0.7,
     rep:3,
-    texte:"You triage incoming support tickets for our routing system. Give each ticket its priority level: P1, P2 or P3.",
+    texte:"You triage incoming support tickets for our routing system. For each ticket, give its priority level (P1, P2 or P3) and explain your choice to the support agent.",
     cas:[
       ["Our production API has been returning 500s for twenty minutes. Every customer request is failing.","p1"],
-      ["The CSV export still works but takes about forty seconds instead of five.","p2"],
       ["Do you offer a student discount for a class of thirty people?","p3"],
-      ["Invoice 4412 carries the wrong VAT number and our accountant has rejected it.","p2"]
+      ["Our CEO cannot open the dashboard and has a board meeting in one hour. Please fix this now!","p2"],
+      ["There is a typo in the refund clause of your terms of service: it says 13 days instead of 30.","p2"],
+      ["A customer says she can see another company's invoices in her account.","p1"]
     ]
   }
 };
