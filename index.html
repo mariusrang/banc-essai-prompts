@@ -421,7 +421,7 @@ tr.det li .sc{display:inline-block;min-width:38px;color:var(--steel)}
           <button class="btn btn-violet" id="run">Run the bench</button>
           <span class="est" id="est" aria-live="polite"></span>
         </div>
-        <p class="help" style="margin-top:12px">What you submit is sent to the evaluation engine and to Groq's API, and is stored. <a href="confidentialite.html">Privacy policy</a>.</p>
+        <p class="help" style="margin-top:12px">What you submit is sent to the evaluation engine and to Anthropic's API (Claude), and is stored. <a href="confidentialite.html">Privacy policy</a>.</p>
         <div class="err hidden" id="err" role="alert"></div>
       </div>
     </div>
@@ -554,9 +554,9 @@ const SCENARIOS = {
     texte:"You triage incoming support tickets for our routing system. For each ticket, give its priority level (P1, P2 or P3) and explain your choice to the support agent.",
     cas:[
       ["Our production API has been returning 500s for twenty minutes. Every customer request is failing.","p1"],
-      ["Do you offer a student discount for a class of thirty people?","p3"],
+      ["How do I export my invoices to a CSV file?","p3"],
       ["Our CEO cannot open the dashboard and has a board meeting in one hour. Please fix this now!","p2"],
-      ["There is a typo in the refund clause of your terms of service: it says 13 days instead of 30.","p2"],
+      ["We urgently need single sign-on for our 500 employees. Our legal team will not sign the renewal without it. Please treat this as critical.","p3"],
       ["A customer says she can see another company's invoices in her account.","p1"]
     ]
   }
@@ -581,8 +581,8 @@ let mode='exact', poll=null, timer=null, t0=0, current=null;
    systemMessage du juge, 675 pour celui du reviseur. La longueur des
    sorties, elle, ne peut pas etre connue avant de lancer : on pose une
    hypothese de SORTIE_TYPE tokens par reponse, et l ecran le dit. */
-const TARIF={modele:'openai/gpt-oss-120b',in:.15,out:.60};
-const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=120, RAISONNEMENT=80;
+const TARIF={modele:'claude-haiku-4-5',in:1,out:5};
+const R_IN=4.3, SYS_JUGE=345, SYS_REV=675, SORTIE_TYPE=300, VERDICT_TYPE=120, RAISONNEMENT=0;
 const tk=s=>Math.round(String(s||'').length/R_IN);
 const usd=(i,o)=>(i*TARIF.in+o*TARIF.out)/1e6;
 const money=v=>v==null?'—':(v>=1000?'$'+Math.round(v).toLocaleString('en-US'):v>=1?'$'+v.toFixed(2):v>=.01?'$'+v.toFixed(3):'$'+v.toFixed(4));
@@ -593,7 +593,7 @@ function estimerCampagne(prompt,cas,rep,m){
   // Sans reponse attendue (mode Open), la sortie est du texte libre : ~300 tokens.
   // Avec une reponse attendue, la tache appelle une reponse courte : ~60 tokens,
   // ce qu un prompt non contraint produit typiquement en ajoutant une justification.
-  // gpt-oss raisonne avant de repondre : ~80 tokens de plus par appel, factures en sortie.
+  // Claude Haiku 4.5 sans raisonnement etendu : pas de tokens de reflexion factures.
   const sortieType = (m==='libre' ? SORTIE_TYPE : 60) + RAISONNEMENT;
   const execIn=p*n+entrees, execOut=sortieType*n;
   const juge=m!=='exact';
@@ -653,8 +653,8 @@ function loadScenario(k){
 }
 function estimate(){
   const cas=readCases(); const rep=Number($('rep').value||1); const n=cas.length*rep;
-  // Appels espaces pour tenir dans le quota gratuit de Groq : 2,5 s par passage, 6 s par jugement.
-  const k=mode==='exact'?2.5:8.5;
+  // Appels Claude espaces de 1,5 s, plus le temps de reponse : ~3 s par passage, ~6 s avec le juge.
+  const k=mode==='exact'?3:6;
   if(!n){ $('est').textContent='Add at least one input'; }
   else{
     const e=estimerCampagne($('prompt').value,cas,rep,mode);
