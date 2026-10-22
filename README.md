@@ -6,7 +6,7 @@
 
 Prompt Bench runs one prompt over a test set, repeats every input several times, and measures what varies. A second model scores every answer. A third model reads the failures, explains what went wrong and rewrites the prompt. Each run also shows what it cost in tokens and dollars, and what the prompt would cost in production.
 
-It runs on two n8n workflows and a Google Sheet, with a single HTML page as the interface.
+It runs on five n8n workflows, Claude (Anthropic API) and a Google Sheet, with a single HTML page and a Telegram bot as interfaces. n8n is self-hosted with Docker Compose; the stack in this repository runs it on Postgres.
 
 **[Open the live app →](https://mariusrang.github.io/banc-essai-prompts/)**
 
@@ -16,7 +16,7 @@ It runs on two n8n workflows and a Google Sheet, with a single HTML page as the 
 
 [![Prompt Bench demo: 66.7 % → 100 %, $203 → $72 per month](docs/demo.gif)](docs/demo.mp4)
 
-If the player does not show up, [download the video](docs/demo.mp4).
+If the player does not show up, [download the video](docs/demo.mp4). The video was recorded in September 2026, on an earlier model; the interface and the workflow logic are the same.
 
 ---
 
@@ -50,7 +50,7 @@ Prompt Bench measures both before the prompt goes into production.
 
 The task: give each incoming support ticket a priority level, P1, P2 or P3. Ten real-looking tickets, each with the priority a support team would give it. Every ticket runs three times at temperature 1, scored in Judge mode.
 
-*These runs were made in September 2026 with gemini-3-flash-preview, the model the bench used at the time. The bench now runs on Groq (see [Architecture](#architecture)); rerunning the case study on another model gives different numbers.*
+*These runs were made in September 2026 with gemini-3-flash-preview, the model the bench used at the time. The bench now runs on Claude (see [Architecture](#architecture) and the [rerun on Claude](#rerun-on-claude-october-2026) below).*
 
 The first prompt is the one most people would write:
 
@@ -71,6 +71,17 @@ What the reviewer found:
 The final prompt is three times longer, yet each test run costs 27 % less and each production call 64 % less, because the output went from a paragraph to two characters.
 
 **Checked, not a lucky run.** Both prompts were run three times: the first prompt scored 66.7 %, 66.7 % and 56.7 %; the final prompt scored 100 % all three times.
+
+### Rerun on Claude (October 2026)
+
+Same task with five tickets, three repetitions each, temperature 0.7, Judge mode. Claude Haiku 4.5 runs the prompt; Claude Sonnet 4.5 judges and reviews. The first prompt asks for a priority and an explanation for the support agent.
+
+| Version | Pass rate | Production cost per 1,000 calls |
+|---|---:|---:|
+| First prompt | **53.3 %** (four runs in a row) | $1.01 |
+| After one *Apply and run again* | **100 %** | **$0.31** |
+
+The two failing tickets were a CEO who cannot open the dashboard (the model said P1; the team's rule is P2, one blocked user) and an "urgent" single sign-on request (the model said P1; it is a feature request, P3). The reviewer wrote both rules into the prompt and asked for a short answer, which divided the cost by about three.
 
 ![Before and after: 66.7 % and $203 per month on the left, 100 % and $72 per month on the right](docs/before-after.png)
 
@@ -101,7 +112,7 @@ flowchart LR
         READ["Read API<br/>GET /webhook/eval-results"]
         ERR["Error workflow<br/>Error Trigger"]
     end
-    G["Groq API<br/>openai/gpt-oss-120b"]
+    G["Anthropic API<br/>Claude Haiku 4.5 (run)<br/>Claude Sonnet 4.5 (judge, review)"]
     S[("Google Sheet<br/>campagnes · resultats · erreurs")]
 
     UI -- "1 · launch a run" --> RUN
@@ -116,6 +127,7 @@ flowchart LR
     READ -- "read" --> S
     RUN -. "on failure" .-> ERR
     BOT -. "on failure" .-> ERR
+    READ -. "on failure" .-> ERR
     ERR -- "log, mark failed" --> S
     ERR -- "alert" --> TG
 ```
@@ -126,14 +138,16 @@ flowchart LR
 
 **Run a campaign** (`n8n/run-campaign-subworkflow.json`, 19 nodes): the shared sub-workflow called by both entry points.
 
-1. The run is recorded in the Sheet as *in progress* and the test plan is split into one item per call. Each call goes to Groq, spaced out to stay within the free tier's per-minute limits, with 5 retries 5 s apart, and the output and token counts are normalised.
-2. A Switch on the scoring mode sends each output to an exact comparison in code (*exact*), or to a second model call acting as judge against the expected answer (*judge*) or against the instruction itself (*open*).
+1. The run is recorded in the Sheet as *in progress* and the test plan is split into one item per call. Each call goes to Claude Haiku through an HTTP Request node, one call every 1.5 s, with 5 retries 5 s apart, and the output and token counts are normalised.
+2. A Switch on the scoring mode sends each output to an exact comparison in code (*exact*), or to Claude Sonnet acting as judge, at temperature 0, against the expected answer (*judge*) or against the instruction itself (*open*). The judge's JSON is parsed and checked; an unreadable verdict counts as a failure with its reason.
 3. Results are aggregated per input: passes, stability, distinct outputs, scores, tokens and cost. The detail is written to the `resultats` tab.
-4. After a 20-second pause that lets the per-minute token quota recover, the reviewer reads the failures and returns a diagnosis, a corrected prompt and the changes. The run is updated in `campagnes`, and a summary is returned to the caller.
+4. After a 3-second pause, the reviewer (Claude Sonnet) reads the failures and returns a diagnosis, a corrected prompt and the changes. The run is updated in `campagnes`, and a summary is returned to the caller.
 
-**Read API** (`n8n/read-api.json`, 7 nodes): a GET webhook. Without a parameter, it returns the list of runs; with `campagneId`, one run with its per-input statistics and every call. It answers `introuvable`, `en cours`, `erreur` or `campagne`, so the page knows whether to keep polling. A run still in progress after 35 minutes is reported as failed (the server stopped mid-run).
+**Read API** (`n8n/read-api.json`, 8 nodes): a GET webhook. Without a parameter, it returns the list of runs; with `campagneId`, one run with its per-input statistics and every call. An If only reads the `resultats` tab once the run is finished, which halves the reads while the page polls. It answers `introuvable`, `en cours`, `erreur` or `campagne`, so the page knows whether to keep polling. A run still in progress after 35 minutes is reported as failed (the server stopped mid-run).
 
-**Error workflow** (`n8n/error-handler.json`, 8 nodes): set as the error workflow of the engine and the bot. On any production failure it logs the workflow, node, message and execution link to the `erreurs` tab, sends a Telegram alert, and marks the interrupted run as `erreur` so the page stops waiting and shows the cause.
+**Error workflow** (`n8n/error-handler.json`, 9 nodes): set as the error workflow of the engine, the bot and the read API. On any production failure it logs the workflow, node, message and execution link to the `erreurs` tab, sends a Telegram alert with the workflow name and the execution link, and marks the interrupted run as `erreur` so the page stops waiting and shows the cause. Google Sheets read-quota errors on the read API are not alerted: the page simply retries.
+
+**Robustness.** Every external call (Anthropic, Google Sheets, Telegram) has *Retry On Fail* with a set number of tries and wait. The Claude calls continue on error, so one failed call is recorded as a failure instead of stopping the run. The engine has a 30-minute timeout.
 
 **Front end** (`index.html`)
 
@@ -141,29 +155,56 @@ A single HTML file with no build step and no framework. It composes the run, pol
 
 ## How the cost is calculated
 
-- **Pricing:** every step runs on openai/gpt-oss-120b through Groq. The bench uses Groq's free tier, but shows what the prompt would cost on the paid tier: $0.15 per million input tokens and $0.60 per million output tokens (Groq model page, October 2026). The price is saved with each run, so old runs keep the price that applied when they ran: the September runs show Gemini's.
-- **Token counts come from the API.** Groq returns the exact input and output tokens of each call, reasoning tokens included, and the bench adds them up. If a call fails and returns no count, the bench falls back to an estimate from character counts (4.3 characters per token for text sent, 5.5 for generated prose, 4.1 for JSON) and the cost card says so. Those ratios were calibrated on Gemini, where they came within 1 % of the real count.
+- **Pricing.** The prompt under test runs on Claude Haiku 4.5: $1 per million input tokens and $5 per million output tokens. The judge and the reviewer run on Claude Sonnet 4.5: $3 and $15. The price is saved with each run, so old runs keep the price that applied when they ran (the September runs show Gemini's).
+- **Token counts come from the API.** Anthropic returns the exact input and output tokens of each call, and the bench adds them up. If a call fails and returns no count, the bench falls back to an estimate from character counts and the cost card says so.
 - **Before a run**, the cost shown under the Run button is an estimate, since the length of the outputs can't be known in advance.
-- **The cost of a run** includes all three models: running the prompt, judging the outputs and the review.
+- **The cost of a run** includes all three steps: running the prompt, judging the outputs and the review.
 - **The production cost** only counts running the prompt. The judge and the reviewer are testing tools; you don't pay for them once the prompt is live. The monthly projection multiplies that cost per call by the volume you type in (1,000,000 by default).
 
 ## Limits
 
-- **The judge is a model too.** Judge and Open modes are only as good as the judge. Exact mode has no such bias, so use it whenever the answer is a label.
-- **A small test set gives a noisy score.** With 10 inputs × 3 repetitions, a few points of difference can be chance. In one test, a corrected cover-letter prompt scored 94.4 % on its first run. Rerun three times, it averaged 88.9 % against 87.8 % for the original, and the two could not be told apart (p = 0.82). Rerun a version before trusting a small gain.
-- **Free tier limits.** Groq's free tier allows 30 requests and 8,000 tokens per minute, and 200,000 tokens per day. The engine spaces its calls accordingly, so a 30-call run takes 4 to 5 minutes, and about eight runs fit in a day.
-- **One model.** Every step uses openai/gpt-oss-120b. Comparing models is not supported yet.
+- **The judge is a model too.** Judge and Open modes are only as good as the judge. It runs at temperature 0 on a stronger model than the one under test, and Exact mode has no judge at all, so use Exact whenever the answer is a label.
+- **A small test set gives a noisy score.** With 5 to 10 inputs × 3 repetitions, a few points of difference can be chance. Rerun a version before trusting a small gain.
+- **Open mode rarely reaches 10/10.** Without an expected answer, the judge checks every constraint of the prompt literally, and each rule the fix adds is one more thing to check.
+- **Google Sheets is the project data store.** It is readable by anyone without code, but it allows 60 reads per minute; the page polls every 3 seconds, so several open tabs can hit the quota. Moving the `campagnes`, `resultats` and `erreurs` tables to the Postgres database already in the stack is the next step; only the Google Sheets nodes would change.
+- **Comparing models is not supported yet.** Every run tests one model (Claude Haiku).
 
 ## Run your own
 
-1. **Google Sheet.** Create a spreadsheet with two tabs:
+1. **n8n with Docker.** Clone the repository, then:
+   ```bash
+   cp .env.example .env      # fill in N8N_HOST, N8N_ENCRYPTION_KEY (openssl rand -hex 32) and the Postgres password
+   docker compose up -d      # Postgres (with a healthcheck), n8n and Caddy for HTTPS
+   ```
+   Open `https://<N8N_HOST>` and create the owner account. Workflows and credentials are kept in the `postgres_data` and `n8n_data` named volumes, so they survive `docker compose down` then `up`. Image versions are pinned. To host it for free on Google Cloud's always-free e2-micro VM instead, run [`deploy/install-n8n-gcp.sh`](deploy/install-n8n-gcp.sh) in Cloud Shell: it creates the VM, a static IP (about $3.65 a month) and the same Docker stack, with HTTPS through sslip.io.
+2. **Google Sheet.** Create a spreadsheet with three tabs:
    - `campagnes`: `Campagne ID`, `Date`, `Nom`, `Prompt`, `Mode`, `Temperature`, `Repetitions`, `Nb cas`, `Nb appels`, `Statut`, `Taux reussite`, `Cas instables`, `Latence moyenne`, `Score moyen`, `Diagnostic`, `Prompt corrige`, `Analyse`, `Tokens entree`, `Tokens sortie`, `Cout USD`, `Cout detail`
    - `resultats`: `Campagne ID`, `Cas ID`, `Entree`, `Attendu`, `Repetition`, `Sortie`, `Reussi`, `Score`, `Justification`, `Erreur`, `Tokens entree`, `Tokens sortie`
-   - `erreurs`: leave it empty, the error workflow writes its own headers
-2. **n8n server.** Any n8n instance works. To host your own for free on Google Cloud's always-free e2-micro VM, run [`deploy/install-n8n-gcp.sh`](deploy/install-n8n-gcp.sh) in Cloud Shell: it creates the VM, a static IP, Docker, n8n and HTTPS through Caddy and sslip.io. The static IP is billed at about $3.65 a month.
-3. **Workflows.** Import the five files of `n8n/` (*Workflows → Import from file*), the sub-workflow first. Then replace the placeholders: `YOUR_GOOGLE_SHEET_ID` in every Google Sheets node, `YOUR_SUBWORKFLOW_ID` in the two *Executer la campagne* nodes, `YOUR_TELEGRAM_CHAT_ID` in the bot trigger and the alert, and the engine and bot ids in the error workflow's If. Add the credentials: a Google Service Account (share the Sheet with its email), a Groq key from console.groq.com, and a Telegram bot token from @BotFather. Publish the error workflow first, set it as the error workflow of the engine and the bot (*Settings → Error workflow*), then publish everything.
-4. **Front end.** In `index.html`, set `const API` to your instance's webhook base URL (`https://<your-host>/webhook`).
-5. **Hosting.** Push the repository and turn on GitHub Pages (*Settings → Pages → Deploy from a branch → main / root*).
+   - `erreurs`: `Date`, `Workflow`, `Noeud`, `Message`, `Execution`, `Lien`
+3. **Credentials** (*Credentials → Create*): an **Anthropic** API key from console.anthropic.com, a **Google Service Account** (share the Sheet with its email) and a **Telegram** bot token from @BotFather. Keys live only in n8n's encrypted credentials, never in the repository.
+4. **Workflows.** Import the five files of `n8n/` (*Workflows → Import from file*), the sub-workflow first. The exports contain the ids of my instance: replace the Google Sheet id in every Google Sheets node, the sub-workflow id in the two *Executer la campagne* nodes, the Telegram chat id in the bot trigger and the alert, and the engine and bot ids in the error workflow's If. Select your credentials in each node. Publish the error workflow first, set it as the error workflow of the engine, the bot and the read API (*Settings → Error workflow*), then publish everything.
+5. **Front end.** In `index.html`, set `const API` to your instance's webhook base URL (`https://<your-host>/webhook`), then turn on GitHub Pages (*Settings → Pages → Deploy from a branch → main / root*).
+
+## How to test
+
+- **From the web app.** Open the page: the *Ticket triage* scenario is loaded. Click *Run the bench*, wait about a minute, then *Apply and run again*. Expected: about 53 % then 100 %, and the cost per 1,000 calls divided by about three.
+- **From the command line**, without the page:
+  ```bash
+  curl -X POST https://<your-host>/webhook/eval-run -H 'Content-Type: application/json' \
+    -d '{"nom":"curl test","prompt":"Reply with only yes.","mode":"exact","repetitions":1,"temperature":0,"cas":[{"entree":"Ready?","attendu":"yes"}]}'
+  # → 202 {"campagneId":"camp_…","statut":"en cours", …}
+  curl "https://<your-host>/webhook/eval-results?campagneId=camp_…"
+  ```
+- **From Telegram.** Send `/status` for the last five runs, or:
+  ```
+  /test judge
+  You triage incoming support tickets for our routing system. Reply with only the priority code: p1, p2 or p3.
+  cases:
+  Our production API has been returning 500s for twenty minutes. Every customer request is failing. => p1
+  Our CEO cannot open the dashboard and has a board meeting in one hour. Please fix this now! => p2
+  ```
+  Any other message returns the usage message.
+- **Error path.** A request without a prompt returns HTTP 400 with the reason, and a malformed `/test` returns the usage message. To trigger the error workflow, select a wrong credential in the *Lire les campagnes* node of the read API and open *History*: the request fails, the error lands in the `erreurs` tab and a Telegram alert arrives with the workflow name and the execution link. A wrong Anthropic key shows differently: every call is marked *Call failed* with the API's message, and the run still finishes.
 
 ## Repository
 
@@ -181,13 +222,16 @@ n8n/telegram-bot.json              Telegram entry point (/test, /status)
 n8n/run-campaign-subworkflow.json  shared sub-workflow that runs a campaign
 n8n/read-api.json                  read API workflow
 n8n/error-handler.json             error workflow (log, alert, mark failed)
-deploy/                  one-command install of n8n on Google Cloud
+docker-compose.yml       n8n + Postgres + Caddy, pinned versions, named volumes
+Caddyfile                HTTPS reverse proxy in front of n8n
+.env.example             environment variables to copy into .env (never committed)
+deploy/                  one-command install of the same stack on Google Cloud
 docs/                    demo video, GIF and screenshots
 ```
 
 ## Privacy
 
-The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine and to Groq's API, and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
+The site sets no cookies and stores nothing in the browser, so it needs no consent banner. Fonts are self-hosted, so opening the page sends nothing to Google. What you submit in a run (prompt, test inputs) is sent to the n8n engine and to Anthropic's API (Claude), and is stored in the Google Sheet. The page says so next to the *Run* button, and the privacy policy gives the details. The legal pages are in French, as the publisher is based in France.
 
 ## Author
 
