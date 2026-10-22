@@ -7,7 +7,7 @@
 #    - une VM e2-micro (offre gratuite à vie) dans us-central1, Debian 12, 30 Go
 #    - une adresse IP fixe (≈ 3,65 $/mois, la seule partie payante)
 #    - une règle de pare-feu qui ouvre le web (80/443)
-#  Puis, sur la VM : 2 Go de swap, Docker, n8n et Caddy (HTTPS automatique).
+#  Puis, sur la VM : 2 Go de swap, Docker, Postgres, n8n et Caddy (HTTPS automatique).
 #
 #  Adresse obtenue : https://<ip-avec-des-tirets>.sslip.io
 #  (sslip.io transforme l'IP en nom de domaine, Let's Encrypt fournit le certificat)
@@ -74,22 +74,57 @@ fi
 mkdir -p /opt/n8n
 cd /opt/n8n
 
-# Clé de chiffrement des identifiants n8n : générée une seule fois, à sauvegarder
+# Clé de chiffrement des identifiants n8n et mot de passe Postgres :
+# générés une seule fois, à sauvegarder
 if [ ! -f .encryption_key ]; then
   openssl rand -hex 32 > .encryption_key && chmod 600 .encryption_key
+fi
+if [ ! -f .pg_password ]; then
+  openssl rand -hex 24 > .pg_password && chmod 600 .pg_password
 fi
 
 cat > .env <<ENV
 N8N_HOST=${HOST}
 N8N_ENCRYPTION_KEY=$(cat .encryption_key)
+POSTGRES_USER=n8n
+POSTGRES_PASSWORD=$(cat .pg_password)
+POSTGRES_DB=n8n
 ENV
+chmod 600 .env
 
+# Même pile que docker-compose.yml à la racine du dépôt, avec en plus les
+# réglages mémoire de la e2-micro (1 Go). Versions figées : pas de :latest.
+# Attention : sur une VM qui tournait déjà avec SQLite, passer à Postgres
+# démarre n8n vide. Exporter les workflows avant, puis les réimporter.
 cat > docker-compose.yml <<'YML'
 services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+  postgres:
+    image: postgres:16.4-alpine
     restart: unless-stopped
     environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.43.8
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       - N8N_HOST=${N8N_HOST}
       - N8N_PORT=5678
       - N8N_PROTOCOL=https
@@ -112,7 +147,7 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
   caddy:
-    image: caddy:2
+    image: caddy:2.8.4-alpine
     restart: unless-stopped
     ports:
       - "80:80"
@@ -124,6 +159,7 @@ services:
     depends_on:
       - n8n
 volumes:
+  postgres_data:
   n8n_data:
   caddy_data:
   caddy_config:
