@@ -8,7 +8,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -164,12 +164,16 @@
         1248,
         176
       ],
-      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "credentials": {
         "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
           "name": "Google Service Account account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -187,7 +191,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// --- Estimation des tokens ---------------------------------------------\n// Calibre sur l execution 581 du 22/09/2026 (campagne camp_mucwi5f9_bqrg4) :\n//   envoye  48915 caracteres -> 11403 tokens reels -> 4.3 caracteres par token\n//   genere  31583 caracteres ->  5701 tokens reels -> 5.5 caracteres par token\n// Le texte envoye (prompt structure, listes, termes techniques) se tokenise\n// moins bien que la prose generee, d ou deux ratios differents.\n// Une sortie non vide coute au moins un token, meme d un seul mot.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_SORTIE = 5.5;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estOut = s => { const n = String(s == null ? '' : s).length; return n ? Math.max(1, Math.round(n / CHARS_TOKEN_SORTIE)) : 0; };\n\nconst runs = $('Eclater les executions').all();\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nreturn $input.all().map((item, i) => {\n  const r = runs[i] ? runs[i].json : {};\n  const erreur = item.json && item.json.error ? String(item.json.error.message || item.json.error) : '';\n  const u = (item.json && item.json.usage) || null;\n  const sortie = String(extraireTexte(item.json)).trim();\n  return { json: {\n    campagneId: r.campagneId,\n    casId: r.casId,\n    entree: r.entree,\n    attendu: r.attendu,\n    repetition: r.repetition,\n    mode: r.mode,\n    prompt: r.prompt,\n    sortie,\n    erreur,\n    tokensInExec: u ? u.prompt_tokens : estIn(r.prompt) + estIn(r.entree),\n    tokensOutExec: u ? u.completion_tokens : estOut(sortie),\n    tokensReels: !!u\n  } };\n});"
+        "jsCode": "// --- Estimation des tokens (repli si l API ne renvoie pas usage) -------\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_SORTIE = 5.5;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estOut = s => { const n = String(s == null ? '' : s).length; return n ? Math.max(1, Math.round(n / CHARS_TOKEN_SORTIE)) : 0; };\n\nconst runs = $('Eclater les executions').all();\n\n// Lit une reponse Anthropic (content: [{type:'text', text}]) ou OpenAI (choices).\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.content)) {\n    return json.content.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  if (typeof json.content === 'string') return json.content;\n  return '';\n}\nconst tIn = u => u ? (u.input_tokens != null ? u.input_tokens : u.prompt_tokens) : null;\nconst tOut = u => u ? (u.output_tokens != null ? u.output_tokens : u.completion_tokens) : null;\n\nreturn $input.all().map((item, i) => {\n  const r = runs[i] ? runs[i].json : {};\n  const erreur = item.json && item.json.error ? String(item.json.error.message || item.json.error) : '';\n  const u = (item.json && item.json.usage) || null;\n  const sortie = String(extraireTexte(item.json)).trim();\n  return { json: {\n    campagneId: r.campagneId,\n    casId: r.casId,\n    entree: r.entree,\n    attendu: r.attendu,\n    repetition: r.repetition,\n    mode: r.mode,\n    prompt: r.prompt,\n    sortie,\n    erreur,\n    tokensInExec: u ? tIn(u) : estIn(r.prompt) + estIn(r.entree),\n    tokensOutExec: u ? tOut(u) : estOut(sortie),\n    tokensReels: !!u\n  } };\n});"
       },
       "id": "8f7430b6-2b46-4863-a91a-6abf05b3150f",
       "name": "Normaliser la sortie",
@@ -200,7 +204,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Le juge recoit a chaque appel : son systemMessage (constante calibree),\n// le prompt teste, l entree, la reponse attendue et la sortie obtenue.\n// 24970 tokens reels sur 18 appels a l execution 581, dont 345 par appel\n// imputables au systemMessage une fois le reste estime a 4.3 chars/token.\n// Le verdict sort en JSON, qui se tokenise plus dense que la prose (4.1).\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_JUGE = 345;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nconst sources = $('Normaliser la sortie').all();\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nreturn $input.all().map((item, i) => {\n  const base = sources[i] ? sources[i].json : {};\n  const brut = extraireTexte(item.json);\n  const u = (item.json && item.json.usage) || null;\n  const verdict = parser(brut);\n  const score = verdict && typeof verdict.score === 'number' ? Math.max(0, Math.min(10, Math.round(verdict.score))) : null;\n  const reussi = verdict ? (verdict.verdict === true || (score !== null && score >= 7)) : false;\n  return { json: Object.assign({}, base, {\n    reussi,\n    score: score !== null ? score : (reussi ? 10 : 0),\n    justification: verdict ? String(verdict.justification || '') : 'The judge did not return a usable verdict',\n    tokensInJuge: u ? u.prompt_tokens : TOKENS_SYS_JUGE + estIn(base.prompt) + estIn(base.entree) + estIn(base.attendu) + estIn(base.sortie),\n    tokensOutJuge: u ? u.completion_tokens : estJson(brut),\n    tokensReels: base.tokensReels !== false && !!u\n  }) };\n});"
+        "jsCode": "// Le juge recoit a chaque appel son system prompt, le prompt teste,\n// l entree, la reponse attendue et la sortie obtenue.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_JUGE = 345;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nconst sources = $('Normaliser la sortie').all();\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.content)) {\n    return json.content.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  if (typeof json.content === 'string') return json.content;\n  return '';\n}\nconst tIn = u => u ? (u.input_tokens != null ? u.input_tokens : u.prompt_tokens) : null;\nconst tOut = u => u ? (u.output_tokens != null ? u.output_tokens : u.completion_tokens) : null;\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nreturn $input.all().map((item, i) => {\n  const base = sources[i] ? sources[i].json : {};\n  const brut = extraireTexte(item.json);\n  const u = (item.json && item.json.usage) || null;\n  const verdict = parser(brut);\n  const score = verdict && typeof verdict.score === 'number' ? Math.max(0, Math.min(10, Math.round(verdict.score))) : null;\n  const reussi = verdict ? (verdict.verdict === true || (score !== null && score >= 7)) : false;\n  return { json: Object.assign({}, base, {\n    reussi,\n    score: score !== null ? score : (reussi ? 10 : 0),\n    justification: verdict ? String(verdict.justification || '') : 'The judge did not return a usable verdict',\n    tokensInJuge: u ? tIn(u) : TOKENS_SYS_JUGE + estIn(base.prompt) + estIn(base.entree) + estIn(base.attendu) + estIn(base.sortie),\n    tokensOutJuge: u ? tOut(u) : estJson(brut),\n    tokensReels: base.tokensReels !== false && !!u\n  }) };\n});"
       },
       "id": "26f36044-98fe-4fc4-878e-0d3020280ff5",
       "name": "Verdict du juge",
@@ -213,7 +217,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lignes = $input.all().map(i => i.json);\nconst campagne = $('Recevoir la campagne').first().json;\nconst tronc = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '...' : s; };\n\n// --- Grille tarifaire ---------------------------------------------------\n// openai/gpt-oss-120b sur Groq, tarif payant releve sur console.groq.com/docs/models le 01/10/2026.\n// L offre gratuite de Groq ne coute rien, mais on affiche ce que le prompt couterait en production.\n// Les prix changent : c est un parametre, pas une verite. Il est renvoye a\n// l application pour etre affiche sous le cout.\nconst MODELE = 'openai/gpt-oss-120b';\nconst PRIX_IN = 0.15;   // USD par million de tokens en entree\nconst PRIX_OUT = 0.6;  // USD par million de tokens en sortie (raisonnement inclus)\nconst usd = (tin, tout) => Math.round(((tin * PRIX_IN + tout * PRIX_OUT) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  if (!parCas[l.casId]) {\n    parCas[l.casId] = { casId: l.casId, entree: l.entree, attendu: l.attendu, sorties: [], scores: [], justifs: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[l.casId];\n  c.total += 1;\n  if (l.reussi) c.reussites += 1;\n  c.sorties.push(String(l.sortie == null ? '' : l.sortie));\n  if (typeof l.score === 'number') c.scores.push(l.score);\n  if (l.justification) c.justifs.push(String(l.justification));\n  c.tIn += (l.tokensInExec || 0) + (l.tokensInJuge || 0);\n  c.tOut += (l.tokensOutExec || 0) + (l.tokensOutJuge || 0);\n});\n\nconst cas = Object.values(parCas).map(c => {\n  const distinctes = Array.from(new Set(c.sorties.map(s => s.toLowerCase().trim())));\n  const scoreMoyen = c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null;\n  const scoreMin = c.scores.length ? Math.min.apply(null, c.scores) : null;\n  const scoreMax = c.scores.length ? Math.max.apply(null, c.scores) : null;\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes.length,\n    exemple: c.sorties[0] || '',\n    scoreMoyen,\n    scoreMin,\n    scoreMax,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: usd(c.tIn, c.tOut),\n    apercu: distinctes.slice(0, 3).map(s => tronc(s, 700)),\n    justifications: Array.from(new Set(c.justifs)).slice(0, 3).map(s => tronc(s, 200))\n  };\n});\n\nconst totalAppels = lignes.length;\nconst totalReussites = lignes.filter(l => l.reussi).length;\nconst tauxReussite = totalAppels ? Math.round((totalReussites / totalAppels) * 1000) / 10 : 0;\nconst casInstables = cas.filter(c => c.statut === 'instable' || (c.scoreMax !== null && c.scoreMax - c.scoreMin >= 2)).length;\nconst casEchoues = cas.filter(c => c.statut === 'echec').length;\nconst tousScores = lignes.filter(l => typeof l.score === 'number').map(l => l.score);\nconst scoreMoyen = tousScores.length ? Math.round(tousScores.reduce((a, b) => a + b, 0) / tousScores.length * 10) / 10 : null;\n\n// --- Ventilation des tokens en trois postes -----------------------------\n// La revision est ajoutee plus loin, elle n a pas encore eu lieu a ce stade.\nconst somme = (f) => lignes.reduce((a, l) => a + (l[f] || 0), 0);\nconst tokens = {\n  execIn: somme('tokensInExec'),\n  execOut: somme('tokensOutExec'),\n  jugeIn: somme('tokensInJuge'),\n  jugeOut: somme('tokensOutJuge'),\n  revIn: 0,\n  revOut: 0\n};\n\nconst resumeAnalyse = cas.map(c => ({\n  cas: c.casId,\n  entree: tronc(c.entree, 300),\n  attendu: c.attendu || null,\n  resultat: c.reussites + '/' + c.total,\n  statut: c.statut,\n  scores_par_repetition: c.scores,\n  ecart_de_score: c.scoreMax !== null ? c.scoreMax - c.scoreMin : null,\n  sorties_observees: c.apercu,\n  verdicts: c.justifications\n}));\n\nconst detail = lignes.map(l => ({\n  campagneId: l.campagneId,\n  casId: l.casId,\n  repetition: l.repetition,\n  entree: l.entree,\n  attendu: l.attendu,\n  sortie: l.sortie,\n  reussi: l.reussi ? 'oui' : 'non',\n  score: typeof l.score === 'number' ? l.score : '',\n  justification: l.justification || '',\n  erreur: l.erreur || '',\n  tokensIn: (l.tokensInExec || 0) + (l.tokensInJuge || 0),\n  tokensOut: (l.tokensOutExec || 0) + (l.tokensOutJuge || 0)\n}));\n\nreturn [{ json: {\n  campagneId: campagne.campagneId,\n  nom: campagne.nom,\n  mode: campagne.mode,\n  prompt: campagne.prompt,\n  temperature: campagne.temperature,\n  repetitions: campagne.repetitions,\n  tauxReussite,\n  scoreMoyen,\n  totalAppels,\n  totalReussites,\n  casInstables,\n  casEchoues,\n  nbCas: cas.length,\n  cas,\n  tokens,\n  tarif: { modele: MODELE, prixIn: PRIX_IN, prixOut: PRIX_OUT },\n  tokensReels: lignes.length > 0 && lignes.every(l => l.tokensReels === true),\n  resumeAnalyse,\n  detail\n} }];"
+        "jsCode": "const lignes = $input.all().map(i => i.json);\nconst campagne = $('Recevoir la campagne').first().json;\nconst tronc = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n) + '...' : s; };\n\n// --- Grille tarifaire ---------------------------------------------------\n// claude-haiku-4-5 sur l API Anthropic : 1 USD par million de tokens en entree,\n// 5 USD par million en sortie. Les prix changent : c est un parametre, pas une\n// verite. Il est renvoye a l application pour etre affiche sous le cout.\nconst MODELE = 'claude-haiku-4-5';\nconst PRIX_IN = 1;    // USD par million de tokens en entree\nconst PRIX_OUT = 5;   // USD par million de tokens en sortie\nconst usd = (tin, tout) => Math.round(((tin * PRIX_IN + tout * PRIX_OUT) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  if (!parCas[l.casId]) {\n    parCas[l.casId] = { casId: l.casId, entree: l.entree, attendu: l.attendu, sorties: [], scores: [], justifs: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[l.casId];\n  c.total += 1;\n  if (l.reussi) c.reussites += 1;\n  c.sorties.push(String(l.sortie == null ? '' : l.sortie));\n  if (typeof l.score === 'number') c.scores.push(l.score);\n  if (l.justification) c.justifs.push(String(l.justification));\n  c.tIn += (l.tokensInExec || 0) + (l.tokensInJuge || 0);\n  c.tOut += (l.tokensOutExec || 0) + (l.tokensOutJuge || 0);\n});\n\nconst cas = Object.values(parCas).map(c => {\n  const distinctes = Array.from(new Set(c.sorties.map(s => s.toLowerCase().trim())));\n  const scoreMoyen = c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null;\n  const scoreMin = c.scores.length ? Math.min.apply(null, c.scores) : null;\n  const scoreMax = c.scores.length ? Math.max.apply(null, c.scores) : null;\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes.length,\n    exemple: c.sorties[0] || '',\n    scoreMoyen,\n    scoreMin,\n    scoreMax,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: usd(c.tIn, c.tOut),\n    apercu: distinctes.slice(0, 3).map(s => tronc(s, 700)),\n    justifications: Array.from(new Set(c.justifs)).slice(0, 3).map(s => tronc(s, 200))\n  };\n});\n\nconst totalAppels = lignes.length;\nconst totalReussites = lignes.filter(l => l.reussi).length;\nconst tauxReussite = totalAppels ? Math.round((totalReussites / totalAppels) * 1000) / 10 : 0;\nconst casInstables = cas.filter(c => c.statut === 'instable' || (c.scoreMax !== null && c.scoreMax - c.scoreMin >= 2)).length;\nconst casEchoues = cas.filter(c => c.statut === 'echec').length;\nconst tousScores = lignes.filter(l => typeof l.score === 'number').map(l => l.score);\nconst scoreMoyen = tousScores.length ? Math.round(tousScores.reduce((a, b) => a + b, 0) / tousScores.length * 10) / 10 : null;\n\n// --- Ventilation des tokens en trois postes -----------------------------\nconst somme = (f) => lignes.reduce((a, l) => a + (l[f] || 0), 0);\nconst tokens = {\n  execIn: somme('tokensInExec'),\n  execOut: somme('tokensOutExec'),\n  jugeIn: somme('tokensInJuge'),\n  jugeOut: somme('tokensOutJuge'),\n  revIn: 0,\n  revOut: 0\n};\n\nconst resumeAnalyse = cas.map(c => ({\n  cas: c.casId,\n  entree: tronc(c.entree, 300),\n  attendu: c.attendu || null,\n  resultat: c.reussites + '/' + c.total,\n  statut: c.statut,\n  scores_par_repetition: c.scores,\n  ecart_de_score: c.scoreMax !== null ? c.scoreMax - c.scoreMin : null,\n  sorties_observees: c.apercu,\n  verdicts: c.justifications\n}));\n\nconst detail = lignes.map(l => ({\n  campagneId: l.campagneId,\n  casId: l.casId,\n  repetition: l.repetition,\n  entree: l.entree,\n  attendu: l.attendu,\n  sortie: l.sortie,\n  reussi: l.reussi ? 'oui' : 'non',\n  score: typeof l.score === 'number' ? l.score : '',\n  justification: l.justification || '',\n  erreur: l.erreur || '',\n  tokensIn: (l.tokensInExec || 0) + (l.tokensInJuge || 0),\n  tokensOut: (l.tokensOutExec || 0) + (l.tokensOutJuge || 0)\n}));\n\nreturn [{ json: {\n  campagneId: campagne.campagneId,\n  nom: campagne.nom,\n  mode: campagne.mode,\n  prompt: campagne.prompt,\n  temperature: campagne.temperature,\n  repetitions: campagne.repetitions,\n  tauxReussite,\n  scoreMoyen,\n  totalAppels,\n  totalReussites,\n  casInstables,\n  casEchoues,\n  nbCas: cas.length,\n  cas,\n  tokens,\n  tarif: { modele: MODELE, prixIn: PRIX_IN, prixOut: PRIX_OUT },\n  tokensReels: lignes.length > 0 && lignes.every(l => l.tokensReels === true),\n  resumeAnalyse,\n  detail\n} }];"
       },
       "id": "0ba1a127-f671-4f8a-a014-13e0a0753c11",
       "name": "Agreger la campagne",
@@ -244,7 +248,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -393,12 +397,16 @@
         4112,
         432
       ],
-      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "credentials": {
         "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
           "name": "Google Service Account account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -421,7 +429,7 @@
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -567,16 +575,20 @@
         3232,
         432
       ],
-      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "credentials": {
         "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
           "name": "Google Service Account account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## Sous-workflow partage\n\nAppele par deux portes d entree : le webhook du site (Banc eval - moteur) et le bot Telegram (/test). Il recoit une campagne deja preparee, cas x repetitions, et fait tout le travail une seule fois pour les deux.\n\nGroq openai/gpt-oss-120b, offre gratuite. Appels espaces (2,5 s pour l execution, 6 s pour le juge) pour tenir sous 30 requetes et 8 000 tokens par minute, 5 tentatives espacees de 5 s.",
+        "content": "## Sous-workflow partage\n\nAppele par deux portes d entree : le webhook du site (Banc eval - moteur) et le bot Telegram (/test). Il recoit une campagne deja preparee, cas x repetitions, et fait tout le travail une seule fois pour les deux.\n\nModele teste : Claude Haiku 4.5 (rapide, bon marche). Juge et reviseur : Claude Sonnet 4.5 (plus fiable). Appels HTTP a l API Anthropic, espaces de 1,5 s, 5 tentatives.",
         "color": 5
       },
       "id": "953bc162-1575-4fca-8985-0351d58c1611",
@@ -641,7 +653,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const base = $('Agreger la campagne').first().json;\n\n// Le reviseur est un troisieme appel, une seule fois par campagne.\n// 4650 tokens en entree a l execution 581, dont environ 675 pour son\n// systemMessage une fois le reste estime a 4.3 caracteres par token.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_REVISEUR = 675;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  const c = json.content;\n  if (c && Array.isArray(c.parts)) {\n    return c.parts.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (typeof c === 'string') return c;\n  return '';\n}\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nconst brut = extraireTexte($input.first().json);\nconst u = ($input.first().json && $input.first().json.usage) || null;\nconst analyse = parser(brut) || {};\nconst problemes = Array.isArray(analyse.problemes) ? analyse.problemes : [];\nconst changements = Array.isArray(analyse.changements) ? analyse.changements : [];\n\n// --- Comptes finaux -----------------------------------------------------\nconst tarif = base.tarif || { modele: 'inconnu', prixIn: 0, prixOut: 0 };\nconst t = Object.assign({ execIn: 0, execOut: 0, jugeIn: 0, jugeOut: 0 }, base.tokens, {\n  revIn: u ? u.prompt_tokens : TOKENS_SYS_REVISEUR + estIn(base.prompt) + estIn(JSON.stringify(base.resumeAnalyse || [])),\n  revOut: u ? u.completion_tokens : estJson(brut)\n});\n\nconst usd = (tin, tout) => Math.round(((tin * tarif.prixIn + tout * tarif.prixOut) / 1e6) * 1e6) / 1e6;\nconst tokensEntree = t.execIn + t.jugeIn + t.revIn;\nconst tokensSortie = t.execOut + t.jugeOut + t.revOut;\n\n// Le cout d un appel en production n est PAS le cout du banc : en production\n// on paie l execution seule, pas le juge ni le reviseur, qui sont l outillage\n// de test. C est ce chiffre qu il faut projeter a l echelle.\nconst appels = base.totalAppels || 1;\nconst coutParAppel = Math.round((usd(t.execIn, t.execOut) / appels) * 1e8) / 1e8;\n\nconst cout = {\n  total: usd(tokensEntree, tokensSortie),\n  execution: usd(t.execIn, t.execOut),\n  jugement: usd(t.jugeIn, t.jugeOut),\n  revision: usd(t.revIn, t.revOut),\n  parAppelProduction: coutParAppel,\n  modele: tarif.modele,\n  prixIn: tarif.prixIn,\n  prixOut: tarif.prixOut,\n  estime: !(base.tokensReels && u)\n};\n\nreturn [{ json: Object.assign({}, base, {\n  diagnostic: String(analyse.diagnostic || ''),\n  promptCorrige: String(analyse.promptCorrige || ''),\n  confianceAnalyse: String(analyse.confiance || ''),\n  problemes,\n  changements,\n  analyseJson: JSON.stringify({ problemes, changements, confiance: analyse.confiance || '' }),\n  analyseOk: !!analyse.promptCorrige,\n  tokens: t,\n  tokensEntree,\n  tokensSortie,\n  cout,\n  coutJson: JSON.stringify(cout)\n}) }];"
+        "jsCode": "const base = $('Agreger la campagne').first().json;\n\n// Le reviseur est un troisieme appel, une seule fois par campagne.\nconst CHARS_TOKEN_ENVOI = 4.3;\nconst CHARS_TOKEN_JSON = 4.1;\nconst TOKENS_SYS_REVISEUR = 675;\nconst estIn = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_ENVOI);\nconst estJson = s => Math.round(String(s == null ? '' : s).length / CHARS_TOKEN_JSON);\n\nfunction extraireTexte(json) {\n  if (!json) return '';\n  if (Array.isArray(json.content)) {\n    return json.content.map(p => (p && typeof p.text === 'string') ? p.text : '').join('');\n  }\n  if (Array.isArray(json.choices) && json.choices[0] && json.choices[0].message) {\n    return String(json.choices[0].message.content || '');\n  }\n  if (typeof json.text === 'string') return json.text;\n  if (typeof json.content === 'string') return json.content;\n  return '';\n}\nconst tIn = u => u ? (u.input_tokens != null ? u.input_tokens : u.prompt_tokens) : null;\nconst tOut = u => u ? (u.output_tokens != null ? u.output_tokens : u.completion_tokens) : null;\n\nfunction parser(txt) {\n  const nettoye = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();\n  try { return JSON.parse(nettoye); } catch (e) {}\n  const d = nettoye.indexOf('{');\n  const f = nettoye.lastIndexOf('}');\n  if (d !== -1 && f > d) {\n    try { return JSON.parse(nettoye.slice(d, f + 1)); } catch (e) {}\n  }\n  return null;\n}\n\nconst brut = extraireTexte($input.first().json);\nconst u = ($input.first().json && $input.first().json.usage) || null;\nconst analyse = parser(brut) || {};\nconst problemes = Array.isArray(analyse.problemes) ? analyse.problemes : [];\nconst changements = Array.isArray(analyse.changements) ? analyse.changements : [];\n\n// --- Comptes finaux -----------------------------------------------------\n// Le modele teste (execution) est claude-haiku-4-5, au tarif renvoye par l agregation.\n// Le juge et le reviseur tournent sur claude-sonnet-4-5 : 3 USD / 15 USD par million.\nconst tarif = base.tarif || { modele: 'inconnu', prixIn: 0, prixOut: 0 };\nconst OUTIL = { modele: 'claude-sonnet-4-5', prixIn: 3, prixOut: 15 };\nconst t = Object.assign({ execIn: 0, execOut: 0, jugeIn: 0, jugeOut: 0 }, base.tokens, {\n  revIn: u ? tIn(u) : TOKENS_SYS_REVISEUR + estIn(base.prompt) + estIn(JSON.stringify(base.resumeAnalyse || [])),\n  revOut: u ? tOut(u) : estJson(brut)\n});\n\nconst arr = x => Math.round(x * 1e6) / 1e6;\nconst usdExec = (tin, tout) => arr((tin * tarif.prixIn + tout * tarif.prixOut) / 1e6);\nconst usdOutil = (tin, tout) => arr((tin * OUTIL.prixIn + tout * OUTIL.prixOut) / 1e6);\nconst tokensEntree = t.execIn + t.jugeIn + t.revIn;\nconst tokensSortie = t.execOut + t.jugeOut + t.revOut;\n\n// En production on paie l execution seule, pas le juge ni le reviseur,\n// qui sont l outillage de test. C est ce chiffre qu il faut projeter.\nconst appels = base.totalAppels || 1;\nconst execution = usdExec(t.execIn, t.execOut);\nconst jugement = usdOutil(t.jugeIn, t.jugeOut);\nconst revision = usdOutil(t.revIn, t.revOut);\nconst coutParAppel = Math.round((execution / appels) * 1e8) / 1e8;\n\nconst cout = {\n  total: arr(execution + jugement + revision),\n  execution,\n  jugement,\n  revision,\n  parAppelProduction: coutParAppel,\n  modele: tarif.modele,\n  prixIn: tarif.prixIn,\n  prixOut: tarif.prixOut,\n  modeleOutil: OUTIL.modele,\n  estime: !(base.tokensReels && u)\n};\n\nreturn [{ json: Object.assign({}, base, {\n  diagnostic: String(analyse.diagnostic || ''),\n  promptCorrige: String(analyse.promptCorrige || ''),\n  confianceAnalyse: String(analyse.confiance || ''),\n  problemes,\n  changements,\n  analyseJson: JSON.stringify({ problemes, changements, confiance: analyse.confiance || '' }),\n  analyseOk: !!analyse.promptCorrige,\n  tokens: t,\n  tokensEntree,\n  tokensSortie,\n  cout,\n  coutJson: JSON.stringify(cout)\n}) }];"
       },
       "id": "9e302433-ed3c-45b9-9300-ab66ad519b61",
       "name": "Extraire l analyse",
@@ -669,17 +681,26 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "url": "https://api.anthropic.com/v1/messages",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "groqApi",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"openai/gpt-oss-120b\", messages: [{ role: \"system\", content: $json.prompt }, { role: \"user\", content: String($json.entree) }], temperature: Number($json.temperature), max_completion_tokens: 2048, reasoning_effort: \"low\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-haiku-4-5\", max_tokens: 1024, temperature: Number($json.temperature), system: String($json.prompt), messages: [{ role: \"user\", content: String($json.entree) }] }) }}",
         "options": {
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 2500
+              "batchInterval": 1500
             }
           },
           "timeout": 120000
@@ -696,28 +717,38 @@
       "retryOnFail": true,
       "maxTries": 5,
       "waitBetweenTries": 5000,
-      "onError": "continueRegularOutput",
-      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 2.5 s (quota gratuit : 30 req/min, 8 000 tokens/min)",
       "credentials": {
-        "groqApi": {
-          "name": "Groq account"
+        "anthropicApi": {
+          "id": "2qABa4hrm3pZt4jV",
+          "name": "Anthropic account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 2.5 s (quota gratuit : 30 req/min, 8 000 tokens/min)"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "url": "https://api.anthropic.com/v1/messages",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "groqApi",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"openai/gpt-oss-120b\", messages: [{ role: \"system\", content: \"You are a strict automated evaluator. You are given the instruction that was sent to a model, the input it received, sometimes an expected answer, and the answer it produced.\\n\\nCASE 1, an expected answer is provided.\\nJudge whether the obtained answer is equivalent in substance to the expected one. Wording may differ, only the meaning counts. Score 10 if equivalent, 0 if not, an intermediate value if it is partially equivalent but omits something essential.\\n\\nCASE 2, no expected answer is provided.\\nYou audit the output against the instruction, constraint by constraint. Proceed in this order:\\n1. List every explicit checkable constraint the instruction states: length, number of paragraphs, required structure, language, tone, forbidden phrasings, and factual limits such as never claiming anything that is not listed.\\n2. For each constraint decide respected or violated, using only the text of the output.\\n3. When the instruction sets a length, count the words of the output yourself before judging that constraint.\\n4. Any statement in the output that is not supported by the information given in the instruction is a violation, however plausible it sounds. Overstating a level of experience, a diploma or a language level counts as a violation.\\n5. Start from 10 and subtract 2 for every violated constraint. The floor is 0.\\n\\nIn both cases the verdict is true if and only if the score is 8 or higher.\\n\\nBe exacting. A fluent, pleasant output that breaks a stated constraint is a failure, not a near miss. In the justification, name the decisive violated constraint, or state that every constraint was respected. Write in English.\\n\\nReply only with a valid JSON object, no text around it and no code fences:\\n{\\\"verdict\\\": true, \\\"score\\\": 8, \\\"justification\\\": \\\"one sentence of at most 20 words naming the decisive constraint\\\"}\" }, { role: \"user\", content: \"INSTRUCTION GIVEN TO THE MODEL:\\n\" + String($json.prompt) + \"\\n\\nINPUT SUBMITTED:\\n\" + String($json.entree) + \"\\n\\nEXPECTED ANSWER:\\n\" + String($json.attendu || '(none provided, evaluate the answer against the instruction itself)') + \"\\n\\nANSWER OBTAINED:\\n\" + String($json.sortie) }], temperature: 0, max_completion_tokens: 1024, reasoning_effort: \"low\", response_format: { type: \"json_object\" } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-5\", max_tokens: 400, temperature: 0, system: \"You are a strict automated evaluator. You are given the instruction that was sent to a model, the input it received, sometimes an expected answer, and the answer it produced.\\n\\nCASE 1, an expected answer is provided.\\nJudge only whether the obtained answer reaches the same result as the expected one. Wording, case, extra explanation, recommendations and formatting do not matter and must never lower the score: an answer that gives the expected result plus a justification is equivalent. Score 10 if it reaches the expected result, 0 if it reaches a different one, an intermediate value only if it hesitates between several results.\\n\\nCASE 2, no expected answer is provided.\\nYou audit the output against the instruction, constraint by constraint. Proceed in this order:\\n1. List every explicit checkable constraint the instruction states: length, number of paragraphs, required structure, language, tone, forbidden phrasings, and factual limits such as never claiming anything that is not listed.\\n2. For each constraint decide respected or violated, using only the text of the output.\\n3. When the instruction sets a length, count the words of the output yourself before judging that constraint.\\n4. Any statement in the output that is not supported by the information given in the instruction is a violation, however plausible it sounds. Overstating a level of experience, a diploma or a language level counts as a violation.\\n5. Start from 10 and subtract 2 for every violated constraint. The floor is 0.\\n\\nIn both cases the verdict is true if and only if the score is 8 or higher.\\n\\nBe exacting. In case 2, a fluent, pleasant output that breaks a stated constraint is a failure, not a near miss. In the justification, name the decisive point. Write in English.\\n\\nReply only with a valid JSON object, no text around it and no code fences:\\n{\\\"verdict\\\": true, \\\"score\\\": 8, \\\"justification\\\": \\\"one sentence of at most 20 words naming the decisive point\\\"}\", messages: [{ role: \"user\", content: \"INSTRUCTION GIVEN TO THE MODEL:\\n\" + String($json.prompt) + \"\\n\\nINPUT SUBMITTED:\\n\" + String($json.entree) + \"\\n\\nEXPECTED ANSWER:\\n\" + String($json.attendu || '(none provided, evaluate the answer against the instruction itself)') + \"\\n\\nANSWER OBTAINED:\\n\" + String($json.sortie) }] }) }}",
         "options": {
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 6000
+              "batchInterval": 1500
             }
           },
           "timeout": 120000
@@ -734,30 +765,40 @@
       "retryOnFail": true,
       "maxTries": 5,
       "waitBetweenTries": 5000,
-      "onError": "continueRegularOutput",
-      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 6.0 s (quota gratuit : 30 req/min, 8 000 tokens/min)",
       "credentials": {
-        "groqApi": {
-          "name": "Groq account"
+        "anthropicApi": {
+          "id": "2qABa4hrm3pZt4jV",
+          "name": "Anthropic account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 6.0 s (quota gratuit : 30 req/min, 8 000 tokens/min)"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "url": "https://api.anthropic.com/v1/messages",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "groqApi",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"openai/gpt-oss-120b\", messages: [{ role: \"system\", content: \"You are an expert in prompt design for language models. You are given a prompt, the conditions of a test campaign, its overall results, its average token consumption per call, and the per-case detail: the input, the expected answer if any, the score of each repetition, the spread between the best and the worst repetition, the outputs actually observed, and the evaluator's verdicts.\\n\\nYour work has two parts.\\n\\nFirst, the diagnosis. Explain why the prompt fails or wavers, relying only on what is observed in the cases. Distinguish four families of problems: ambiguity in the instruction (the model cannot decide), unconstrained format (it answers correctly but not in the expected form), missing context or rule (it cannot guess what the author had in mind), and conflicting rules (two instructions pull in opposite directions and nothing says which one wins).\\n\\nRead the score spread as carefully as the failures. A case that scores 9 on one repetition and 6 on another, with no change in the input, means the prompt leaves a decision to chance. Name which decision. A case that passes every repetition at the same score is genuinely under control and you say so.\\n\\nWhen expected answers are given and the model keeps choosing a different but plausible answer, the author is applying a rule the prompt never states. Infer that rule from the expected answers and write it into the prompt explicitly.\\n\\nThen, the correction. Propose a corrected version of the prompt, directly usable. Strict rules:\\n- Never change the intent or the domain of the prompt.\\n- Every modification must address a problem observed in the cases, or the cost problem described below, not a stylistic preference.\\n- Resolve the conflicts you found by stating an explicit priority, add the rule that was missing for an observed case, and give a default behaviour for inputs that fit no category.\\n- Cost matters. Output tokens cost about four times as much as input tokens. If the observed outputs contain material the task does not use (explanations nobody asked for, labels, headings, markdown), constrain the output to exactly what the task needs and say so in the changes. Never add length to the prompt unless it fixes an observed failure.\\n- Stay concise: a good prompt is short and has no repetition.\\n- Keep the corrected prompt in the same language as the original prompt.\\n- If the results are already excellent and stable, say so honestly, keep the prompt nearly identical, and propose at most one robustness improvement for the weakest case.\\n\\nWrite the diagnosis, the problems and the change explanations in English.\\n\\nFormatting rule: never use the less-than, greater-than or ampersand characters in your texts.\\n\\nReply only with a valid JSON object, no text around it and no code fences, with exactly this shape:\\n{\\\"diagnostic\\\": \\\"two to four sentences\\\", \\\"problemes\\\": [{\\\"cas\\\": \\\"cas_3\\\", \\\"observation\\\": \\\"what happened\\\", \\\"cause\\\": \\\"why the prompt allows it\\\"}], \\\"promptCorrige\\\": \\\"the full corrected prompt\\\", \\\"changements\\\": [{\\\"quoi\\\": \\\"what changes\\\", \\\"pourquoi\\\": \\\"the problem it fixes\\\"}], \\\"confiance\\\": \\\"high\\\"}\" }, { role: \"user\", content: \"PROMPT UNDER TEST:\\n<<<\\n\" + String($json.prompt) + \"\\n>>>\\n\\nSCORING METHOD: \" + String($json.mode) + \" (\" + String($json.mode === 'exact' ? 'strict string comparison against the expected answer' : ($json.mode === 'juge' ? 'a judge model compares against the expected answer' : 'no expected answer, a judge model evaluates against the instruction itself')) + \")\\nCONDITIONS: \" + String($json.repetitions) + \" repetitions per case, temperature \" + String($json.temperature) + \"\\n\\nOVERALL RESULTS: pass rate \" + String($json.tauxReussite) + \"%\" + String($json.scoreMoyen !== null ? ', average score ' + $json.scoreMoyen + '/10' : '') + \", \" + String($json.casInstables) + \" unstable cases and \" + String($json.casEchoues) + \" failing cases out of \" + String($json.nbCas) + \"\\n\\nCOST: on average each call sent \" + String(Math.round(($json.tokens && $json.tokens.execIn || 0) / ($json.totalAppels || 1))) + \" input tokens to the model and received \" + String(Math.round(($json.tokens && $json.tokens.execOut || 0) / ($json.totalAppels || 1))) + \" output tokens back.\\n\\nPER-CASE DETAIL:\\n\" + String(JSON.stringify($json.resumeAnalyse, null, 1)) }], temperature: 0.3, max_completion_tokens: 4096, reasoning_effort: \"medium\", response_format: { type: \"json_object\" } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-5\", max_tokens: 4096, temperature: 0, system: \"You are an expert in prompt design for language models. You are given a prompt, the conditions of a test campaign, its overall results, its average token consumption per call, and the per-case detail: the input, the expected answer if any, the score of each repetition, the spread between the best and the worst repetition, the outputs actually observed, and the evaluator's verdicts.\\n\\nYour work has two parts.\\n\\nFirst, the diagnosis. Explain why the prompt fails or wavers, relying only on what is observed in the cases. Distinguish four families of problems: ambiguity in the instruction (the model cannot decide), unconstrained format (it answers correctly but not in the expected form), missing context or rule (it cannot guess what the author had in mind), and conflicting rules (two instructions pull in opposite directions and nothing says which one wins).\\n\\nRead the score spread as carefully as the failures. A case that scores 9 on one repetition and 6 on another, with no change in the input, means the prompt leaves a decision to chance. Name which decision. A case that passes every repetition at the same score is genuinely under control and you say so.\\n\\nWhen expected answers are given and the model keeps choosing a different but plausible answer, the author is applying a rule the prompt never states. Infer that rule from the expected answers and write it into the prompt explicitly.\\n\\nFor every case that failed or wavered, the corrected prompt must contain a rule or a short example that names that case's concrete subject: the product feature, the person, the document or the number of people mentioned in the input. A generic category is not enough, because the tested model may not see that the input belongs to it. Never use vague words such as urgent, minor or important in a rule.\\n\\nNever add a numeric length limit (words, characters or sentences) that the original prompt does not already contain: the tested model counts poorly and the evaluator checks every number literally, so a new limit creates new failures. To keep replies short, describe their structure instead, for example one sentence of thanks, one short sentence per problem, then the signature. If the original prompt already has a numeric limit that the outputs keep breaking, replace it with such a structure.\\n\\nBefore you answer, check your corrected prompt case by case: take each test input, apply your rules literally, and confirm they lead to its expected answer, or, without an expected answer, to an output that respects every constraint of your corrected prompt. When a broad rule would send a failing input to the wrong answer, rewrite it so the specific situation wins. Only return a corrected prompt that passes this check for every case.\\n\\nThen, the correction. Propose a corrected version of the prompt, directly usable. Strict rules:\\n- Never change the intent or the domain of the prompt.\\n- Every modification must address a problem observed in the cases, or the cost problem described below, not a stylistic preference.\\n- Resolve the conflicts you found by stating an explicit priority, add the rule that was missing for an observed case, and give a default behaviour for inputs that fit no category.\\n- Cost matters. Output tokens cost about five times as much as input tokens. If the observed outputs contain material the task does not use (explanations nobody asked for, labels, headings, markdown), constrain the output to exactly what the task needs and say so in the changes. Never add length to the prompt unless it fixes an observed failure.\\n- Stay concise: a good prompt is short and has no repetition.\\n- Keep the corrected prompt in the same language as the original prompt.\\n- If the results are already excellent and stable, say so honestly, keep the prompt nearly identical, and propose at most one robustness improvement for the weakest case.\\n\\nWrite the diagnosis, the problems and the change explanations in English.\\n\\nFormatting rule: never use the less-than, greater-than or ampersand characters in your texts.\\n\\nReply only with a valid JSON object, no text around it and no code fences, with exactly this shape:\\n{\\\"diagnostic\\\": \\\"two to four sentences\\\", \\\"problemes\\\": [{\\\"cas\\\": \\\"cas_3\\\", \\\"observation\\\": \\\"what happened\\\", \\\"cause\\\": \\\"why the prompt allows it\\\"}], \\\"promptCorrige\\\": \\\"the full corrected prompt\\\", \\\"changements\\\": [{\\\"quoi\\\": \\\"what changes\\\", \\\"pourquoi\\\": \\\"the problem it fixes\\\"}], \\\"confiance\\\": \\\"high\\\"}\", messages: [{ role: \"user\", content: \"PROMPT UNDER TEST:\\n<<<\\n\" + String($json.prompt) + \"\\n>>>\\n\\nSCORING METHOD: \" + String($json.mode) + \" (\" + String($json.mode === 'exact' ? 'strict string comparison against the expected answer' : ($json.mode === 'juge' ? 'a judge model compares against the expected answer' : 'no expected answer, a judge model evaluates against the instruction itself')) + \")\\nCONDITIONS: \" + String($json.repetitions) + \" repetitions per case, temperature \" + String($json.temperature) + \"\\n\\nOVERALL RESULTS: pass rate \" + String($json.tauxReussite) + \"%\" + String($json.scoreMoyen !== null ? ', average score ' + $json.scoreMoyen + '/10' : '') + \", \" + String($json.casInstables) + \" unstable cases and \" + String($json.casEchoues) + \" failing cases out of \" + String($json.nbCas) + \"\\n\\nCOST: on average each call sent \" + String(Math.round(($json.tokens && $json.tokens.execIn || 0) / ($json.totalAppels || 1))) + \" input tokens to the model and received \" + String(Math.round(($json.tokens && $json.tokens.execOut || 0) / ($json.totalAppels || 1))) + \" output tokens back.\\n\\nPER-CASE DETAIL:\\n\" + String(JSON.stringify($json.resumeAnalyse, null, 1)) }] }) }}",
         "options": {
           "batching": {
             "batch": {
               "batchSize": 1
             }
           },
-          "timeout": 120000
+          "timeout": 180000
         }
       },
       "id": "7a48ab8e-882a-4ee8-b5a8-7e2ff70fa2f4",
@@ -771,29 +812,34 @@
       "retryOnFail": true,
       "maxTries": 5,
       "waitBetweenTries": 5000,
-      "onError": "continueRegularOutput",
-      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 1.0 s (quota gratuit : 30 req/min, 8 000 tokens/min)",
       "credentials": {
-        "groqApi": {
-          "name": "Groq account"
+        "anthropicApi": {
+          "id": "2qABa4hrm3pZt4jV",
+          "name": "Anthropic account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Groq openai/gpt-oss-120b, une requête toutes les 1.0 s (quota gratuit : 30 req/min, 8 000 tokens/min)"
     },
     {
       "parameters": {
-        "amount": 20
+        "amount": 3
       },
       "id": "f8fa1f54-b248-42b7-897a-3957e9dad6bc",
-      "name": "Pause quota Groq",
+      "name": "Pause avant le reviseur",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
         3584,
         608
       ],
+      "webhookId": "b640dc45-67e6-4626-b2ed-67736a2fec70",
       "notes": "Laisse retomber le compteur de tokens par minute avant le gros appel du réviseur"
     },
     {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
       "id": "330789d1-a34b-4403-97fa-6dd1557519ba",
       "name": "Recevoir la campagne",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
@@ -801,22 +847,10 @@
       "position": [
         1040,
         176
-      ],
-      "parameters": {
-        "inputSource": "passthrough"
-      }
+      ]
     },
     {
-      "id": "597d104f-c75a-4816-8301-87770749b7df",
-      "name": "Mode de notation",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [
-        2256,
-        176
-      ],
       "parameters": {
-        "options": {},
         "rules": {
           "values": [
             {
@@ -835,11 +869,12 @@
                 "options": {
                   "caseSensitive": false,
                   "leftValue": "",
-                  "typeValidation": "loose"
+                  "typeValidation": "loose",
+                  "version": 1
                 }
               },
-              "outputKey": "exact",
-              "renameOutput": true
+              "renameOutput": true,
+              "outputKey": "exact"
             },
             {
               "conditions": {
@@ -857,11 +892,12 @@
                 "options": {
                   "caseSensitive": false,
                   "leftValue": "",
-                  "typeValidation": "loose"
+                  "typeValidation": "loose",
+                  "version": 1
                 }
               },
-              "outputKey": "juge",
-              "renameOutput": true
+              "renameOutput": true,
+              "outputKey": "juge"
             },
             {
               "conditions": {
@@ -879,18 +915,31 @@
                 "options": {
                   "caseSensitive": false,
                   "leftValue": "",
-                  "typeValidation": "loose"
+                  "typeValidation": "loose",
+                  "version": 1
                 }
               },
-              "outputKey": "libre",
-              "renameOutput": true
+              "renameOutput": true,
+              "outputKey": "libre"
             }
           ]
-        }
+        },
+        "options": {}
       },
+      "id": "597d104f-c75a-4816-8301-87770749b7df",
+      "name": "Mode de notation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2256,
+        176
+      ],
       "notes": "exact : comparaison en code, gratuite. juge : un modele compare a la reponse attendue. libre : un modele audite la sortie contre la consigne, sans reponse attendue."
     },
     {
+      "parameters": {
+        "jsCode": "// Ce que le sous-workflow renvoie a celui qui l a appele (le site ou le bot\n// Telegram) : un resume compact, le detail etant deja ecrit dans le Google Sheet.\nconst r = $('Extraire l analyse').first().json;\nconst cout = r.cout || {};\nreturn [{ json: {\n  campagneId: r.campagneId,\n  nom: r.nom,\n  mode: r.mode,\n  repetitions: r.repetitions,\n  tauxReussite: r.tauxReussite,\n  scoreMoyen: r.scoreMoyen,\n  nbCas: r.nbCas,\n  totalAppels: r.totalAppels,\n  totalReussites: r.totalReussites,\n  casInstables: r.casInstables,\n  casEchoues: r.casEchoues,\n  coutTotal: cout.total,\n  coutParAppel: cout.parAppelProduction,\n  coutEstime: cout.estime,\n  diagnostic: r.diagnostic,\n  promptCorrige: r.promptCorrige,\n  analyseOk: r.analyseOk,\n  cas: (r.cas || []).map(c => ({ casId: c.casId, entree: c.entree, statut: c.statut, reussites: c.reussites, total: c.total }))\n} }];"
+      },
       "id": "f74a1bde-9dbc-46fb-a00a-f541985cdba7",
       "name": "Resume de la campagne",
       "type": "n8n-nodes-base.code",
@@ -898,12 +947,26 @@
       "position": [
         4336,
         432
-      ],
+      ]
+    },
+    {
       "parameters": {
-        "jsCode": "// Ce que le sous-workflow renvoie a celui qui l a appele (le site ou le bot\n// Telegram) : un resume compact, le detail etant deja ecrit dans le Google Sheet.\nconst r = $('Extraire l analyse').first().json;\nconst cout = r.cout || {};\nreturn [{ json: {\n  campagneId: r.campagneId,\n  nom: r.nom,\n  mode: r.mode,\n  repetitions: r.repetitions,\n  tauxReussite: r.tauxReussite,\n  scoreMoyen: r.scoreMoyen,\n  nbCas: r.nbCas,\n  totalAppels: r.totalAppels,\n  totalReussites: r.totalReussites,\n  casInstables: r.casInstables,\n  casEchoues: r.casEchoues,\n  coutTotal: cout.total,\n  coutParAppel: cout.parAppelProduction,\n  coutEstime: cout.estime,\n  diagnostic: r.diagnostic,\n  promptCorrige: r.promptCorrige,\n  analyseOk: r.analyseOk,\n  cas: (r.cas || []).map(c => ({ casId: c.casId, entree: c.entree, statut: c.statut, reussites: c.reussites, total: c.total }))\n} }];"
-      }
+        "content": "## Role de chaque node (sub-workflow : executer une campagne)\nAppele par le moteur (site) et par le bot Telegram. Fait tout le travail d un test, une seule fois pour les deux.\n\n- **Recevoir la campagne** (Execute Workflow Trigger) : point d entree, recoit la campagne preparee (prompt, cas, repetitions).\n- **Enregistrer la campagne** (Google Sheets) : ajoute la ligne du run dans l onglet campagnes, statut \"en cours\".\n- **Reprendre le plan de test** (Set) : recupere la liste des appels, que le node Sheets avait remplacee.\n- **Eclater les executions** (Split Out) : 1 item par appel (5 cas x 3 repetitions = 15).\n- **Executer le prompt** (HTTP Request, Claude Haiku) : envoie le prompt teste + l entree a l API Anthropic. 1 appel / 1,5 s, 5 retries espaces de 5 s, continue on error.\n- **Normaliser la sortie** (Code) : extrait le texte de la reponse et les vrais tokens (entree / sortie).\n- **Mode de notation** (Switch) : 3 sorties, exact / juge / libre (open).\n- **Comparaison exacte** (Code) : mode exact, compare la sortie a l attendu, en code, gratuit.\n- **Juger la sortie** (HTTP Request, Claude Sonnet) : modes juge et open, verdict JSON (verdict, score /10, justification), temperature 0.\n- **Verdict du juge** (Code) : lit le JSON du juge ; reussi si verdict vrai ou score >= 7 ; JSON illisible = echec explique.\n- **Agreger la campagne** (Code) : regroupe par cas, taux de reussite, cas instables, score moyen, tokens, cout.\n- **Eclater le detail** (Split Out) : 1 item par appel pour l ecriture.\n- **Enregistrer les resultats** (Google Sheets) : 1 ligne par appel dans l onglet resultats.\n- **Reprendre l agregation** (Code) : revient a 1 seul item pour lancer le reviewer une seule fois.\n- **Pause avant le reviseur** (Wait 3 s) : espace les appels pour la limite de requetes par minute.\n- **Analyser le prompt** (HTTP Request, Claude Sonnet) : le reviewer, rend diagnostic + problemes + prompt corrige + changements en JSON.\n- **Extraire l analyse** (Code) : lit le JSON du reviewer, calcule le cout (Haiku pour l execution, Sonnet pour juge et reviewer) et le cout d un appel en production.\n- **Mettre a jour la campagne** (Google Sheets) : statut \"termine\", taux, diagnostic, prompt corrige, cout.\n- **Resume de la campagne** (Code) : renvoie un resume compact au moteur ou au bot.",
+        "height": 820,
+        "width": 1500,
+        "color": 7
+      },
+      "id": "187ae7a4-2aeb-481d-99e6-e3b055124e09",
+      "name": "Role de chaque node",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        864
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Verdict du juge": {
       "main": [
@@ -1030,18 +1093,7 @@
       "main": [
         [
           {
-            "node": "Pause quota Groq",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pause quota Groq": {
-      "main": [
-        [
-          {
-            "node": "Analyser le prompt",
+            "node": "Pause avant le reviseur",
             "type": "main",
             "index": 0
           }
@@ -1116,11 +1168,34 @@
           }
         ]
       ]
+    },
+    "Pause avant le reviseur": {
+      "main": [
+        [
+          {
+            "node": "Analyser le prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
     "executionTimeout": 1800,
     "callerPolicy": "workflowsFromSameOwner"
-  }
+  },
+  "versionId": "53ba4071-b74f-4bd8-9a82-bb2f47a9799d",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "945b50218eb566fea5c9af4fada3bb82adcad98317d5a8bffbc6094961a9baa2"
+  },
+  "nodeGroups": [],
+  "id": "VY50o6Xr9u1ncTwh",
+  "tags": []
 }

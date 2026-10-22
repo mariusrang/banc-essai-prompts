@@ -10,15 +10,15 @@
           "allowedOrigins": "*"
         }
       },
-      "id": "0200778d-5de6-4e67-8918-34d8d8c06727",
+      "id": "3f3ff402-6643-46ec-a1fe-d641f6fcbeb3",
       "name": "Lancer une campagne",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        368,
-        208
+        0,
+        304
       ],
-      "webhookId": "9253e42a-2d99-4c1c-97b4-8ba10764d874"
+      "webhookId": "07dd7e4a-ab34-4ed6-903d-5d9036ec78d2"
     },
     {
       "parameters": {
@@ -31,7 +31,6 @@
           },
           "conditions": [
             {
-              "id": "prompt-notempty",
               "leftValue": "={{ $json.body.prompt }}",
               "operator": {
                 "type": "string",
@@ -40,7 +39,6 @@
               "rightValue": ""
             },
             {
-              "id": "cas-count",
               "leftValue": "={{ ($json.body.cas || []).length }}",
               "operator": {
                 "type": "number",
@@ -54,26 +52,26 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "63407be2-18a3-4e1e-a7b8-0906028eda46",
+      "id": "e75446d5-c126-4c2d-9d2d-7d57a3bf5122",
       "name": "Requete valide",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
+      "typeVersion": 2.2,
       "position": [
-        592,
-        208
+        240,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "const body = $json.body || {};\nconst cas = Array.isArray(body.cas) ? body.cas : [];\nconst repetitions = Math.min(Math.max(parseInt(body.repetitions) || 3, 1), 5);\nconst campagneId = 'camp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);\nconst modesValides = ['exact', 'juge', 'libre'];\nconst mode = modesValides.includes(body.mode) ? body.mode : 'exact';\nconst prompt = String(body.prompt || '');\nconst temperature = typeof body.temperature === 'number' ? body.temperature : 0.7;\n\nconst runs = [];\ncas.forEach((c, i) => {\n  for (let r = 1; r <= repetitions; r++) {\n    runs.push({\n      campagneId,\n      casId: 'cas_' + (i + 1),\n      entree: String(c.entree != null ? c.entree : ''),\n      attendu: mode === 'libre' ? '' : String(c.attendu != null ? c.attendu : ''),\n      repetition: r,\n      mode,\n      prompt,\n      temperature\n    });\n  }\n});\n\nreturn [{ json: {\n  campagneId,\n  nom: String(body.nom || 'Campagne sans nom'),\n  prompt,\n  mode,\n  temperature,\n  repetitions,\n  nbCas: cas.length,\n  nbAppels: runs.length,\n  runs\n} }];"
       },
-      "id": "076d7638-581a-47fc-8cce-c09bb29f75fc",
+      "id": "b539d3f6-8aa7-442d-8523-8f2222f7ea6a",
       "name": "Preparer la campagne",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        816,
-        176
+        480,
+        208
       ]
     },
     {
@@ -92,13 +90,34 @@
           }
         }
       },
-      "id": "0cf355e3-06da-4549-8f16-3d3b2e0b4112",
+      "id": "89af4762-739d-44fd-a0b1-02929b8d9f75",
       "name": "Repondre a l app",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        1040,
-        176
+        720,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VY50o6Xr9u1ncTwh",
+          "cachedResultName": "Banc eval - executer une campagne (sous-workflow)"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f8f4dbd3-bfb5-4caf-9119-3d2f73791264",
+      "name": "Executer la campagne",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        208
       ]
     },
     {
@@ -117,54 +136,49 @@
           }
         }
       },
-      "id": "a21e7760-1a67-4d43-813a-0f5a7b7e31ef",
+      "id": "f2edb609-d51e-4f98-b87a-dba0451e00e5",
       "name": "Repondre requete invalide",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        816,
-        448
+        480,
+        432
       ]
     },
     {
-      "id": "3f752ce0-ba0c-477b-b2a3-7514f871dc75",
-      "name": "Executer la campagne",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1264,
-        176
-      ],
       "parameters": {
-        "mode": "once",
-        "source": "database",
-        "workflowId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "YOUR_SUBWORKFLOW_ID"
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      }
-    },
-    {
-      "id": "8f527def-a1e5-4517-8b77-799b49153468",
+        "content": "## Moteur : porte d entree du site\n\nLe webhook est appele par l app (POST /eval-run). Le IF rejette une requete sans prompt ou sans cas de test, avec un code 400 explicite.\n\nLa reponse 202 part des la preparation, avant le moindre appel au modele : l app recoit un identifiant de campagne et viendra lire les resultats via l API de lecture.\n\nLe travail est fait par le sous-workflow **Banc eval - executer une campagne**, partage avec le bot Telegram.",
+        "height": 260,
+        "width": 560,
+        "color": 4
+      },
+      "id": "762e54cc-0dfd-4737-9491-d1d8a60dbdd6",
       "name": "Note moteur",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        300,
-        -200
-      ],
+        -80,
+        -96
+      ]
+    },
+    {
       "parameters": {
-        "content": "## Moteur : porte d entree du site\n\nLe webhook est appele par l app (POST /eval-run). Le IF rejette une requete sans prompt ou sans cas de test (400).\n\nLa reponse 202 part des la preparation : l app recoit un identifiant de campagne et lira les resultats via l API de lecture.\n\nLe travail est fait par le sous-workflow **Banc eval - executer une campagne**, partage avec le bot Telegram.",
-        "height": 260,
-        "width": 560,
-        "color": 4
-      }
+        "content": "## Role de chaque node (moteur : porte d entree du site)\nLance par la web app : fetch POST https://136-71-225-7.sslip.io/webhook/eval-run\n\n- **Lancer une campagne** (Webhook POST /eval-run) : recoit nom, prompt, mode, temperature, repetitions et cas envoyes par la page.\n- **Requete valide** (If) : prompt non vide ET au moins 1 cas.\n- **Repondre requete invalide** (Respond to Webhook) : sinon, code 400 avec le message d erreur. Rien n est lance.\n- **Preparer la campagne** (Code) : cree l ID, borne les repetitions (1 a 5), verifie le mode, fabrique la liste des appels (cas x repetitions).\n- **Repondre a l app** (Respond to Webhook) : code 202 + ID tout de suite, avant tout appel a l IA. La page passe en Running.\n- **Executer la campagne** (Execute Workflow) : appelle le sub-workflow et attend la fin.\n\nError workflow : Banc eval - gestion des erreurs. Timeout : 30 min.",
+        "height": 440,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "0a392ca7-28af-4ebc-a5fe-8646f0d8b1cf",
+      "name": "Role de chaque node",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        624
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Lancer une campagne": {
       "main": [
@@ -218,9 +232,22 @@
       ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "executionTimeout": 1800,
-    "errorWorkflow": "YOUR_ERROR_WORKFLOW_ID"
-  }
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "errorWorkflow": "1OHDQmTcGqp3PkPg",
+    "timezone": "Europe/Paris",
+    "executionTimeout": 1800
+  },
+  "versionId": "2034bccc-eb6a-4a03-b368-2af114df3fe9",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "945b50218eb566fea5c9af4fada3bb82adcad98317d5a8bffbc6094961a9baa2"
+  },
+  "nodeGroups": [],
+  "id": "KVo0qglolhMvMoId",
+  "tags": []
 }

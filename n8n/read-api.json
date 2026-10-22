@@ -9,7 +9,7 @@
           "allowedOrigins": "*"
         }
       },
-      "id": "45e69baf-a094-453c-985d-ea2b7ad444ea",
+      "id": "be82fc55-a956-4688-b2ba-aa54bfe1b135",
       "name": "Demander les resultats",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -21,10 +21,11 @@
     },
     {
       "parameters": {
+        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -38,10 +39,9 @@
               "range": "A:Z"
             }
           }
-        },
-        "authentication": "serviceAccount"
+        }
       },
-      "id": "f7a32e9e-ff00-4f15-bab9-317e996e6276",
+      "id": "c07f8381-4d16-434c-a9b2-893dc2b3e839",
       "name": "Lire les campagnes",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
@@ -50,11 +50,12 @@
         0
       ],
       "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000,
+      "maxTries": 4,
+      "waitBetweenTries": 4000,
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
           "name": "Google Service Account account"
         }
       }
@@ -65,7 +66,7 @@
         "destinationFieldName": "campagnes",
         "options": {}
       },
-      "id": "fea626af-8475-47f5-b4dd-aee535d03dcc",
+      "id": "f0853d5a-d2f8-411a-b923-4fdbbaf2d803",
       "name": "Agreger les campagnes",
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
@@ -76,10 +77,11 @@
     },
     {
       "parameters": {
+        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -93,10 +95,9 @@
               "range": "A:Z"
             }
           }
-        },
-        "authentication": "serviceAccount"
+        }
       },
-      "id": "be988a67-26f8-4643-b2e9-0ebe3f9252b8",
+      "id": "7b65b151-3714-4a77-9b69-e0336a3e7ad5",
       "name": "Lire les resultats",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
@@ -105,11 +106,12 @@
         0
       ],
       "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1000,
+      "maxTries": 4,
+      "waitBetweenTries": 4000,
       "alwaysOutputData": true,
       "credentials": {
         "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
           "name": "Google Service Account account"
         }
       }
@@ -120,7 +122,7 @@
         "destinationFieldName": "resultats",
         "options": {}
       },
-      "id": "2dbaa892-2fe9-4034-ad4a-14d733311ff2",
+      "id": "42ee407c-2719-4af4-a270-c36452d1c5d5",
       "name": "Agreger les resultats",
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
@@ -131,9 +133,9 @@
     },
     {
       "parameters": {
-        "jsCode": "const requete = $('Demander les resultats').first().json;\nconst demande = String((requete.query && requete.query.campagneId) || '').trim();\n\nconst campagnes = ($('Agreger les campagnes').first().json.campagnes || [])\n  .filter(c => c && c['Campagne ID']);\nconst resultats = ($input.first().json.resultats || [])\n  .filter(r => r && r['Campagne ID']);\n\nfunction nombreOuNull(v) {\n  if (v === '' || v == null) return null;\n  const n = Number(v);\n  return isNaN(n) ? null : n;\n}\n\n// La ventilation du cout est stockee en JSON avec la campagne, tarif compris.\n// On la relit telle quelle : une campagne ancienne garde le prix qui\n// s appliquait le jour ou elle a tourne, meme si la grille a change depuis.\nfunction lireCout(c) {\n  try {\n    const o = JSON.parse(c['Cout detail'] || '{}');\n    if (o && typeof o.total === 'number') return o;\n  } catch (e) {}\n  const total = nombreOuNull(c['Cout USD']);\n  return total === null ? null : { total, estime: true };\n}\n\nfunction resumerCampagne(c) {\n  return {\n    campagneId: c['Campagne ID'],\n    date: c['Date'] || '',\n    nom: c['Nom'] || '',\n    mode: c['Mode'] || '',\n    temperature: nombreOuNull(c['Temperature']),\n    repetitions: Number(c['Repetitions']) || 0,\n    nbCas: Number(c['Nb cas']) || 0,\n    nbAppels: Number(c['Nb appels']) || 0,\n    statut: c['Statut'] || '',\n    tauxReussite: nombreOuNull(c['Taux reussite']),\n    casInstables: nombreOuNull(c['Cas instables']),\n    scoreMoyen: nombreOuNull(c['Score moyen']),\n    tokensEntree: nombreOuNull(c['Tokens entree']),\n    tokensSortie: nombreOuNull(c['Tokens sortie']),\n    cout: lireCout(c)\n  };\n}\n\nif (!demande) {\n  const liste = campagnes.map(resumerCampagne).reverse();\n  return [{ json: { type: 'liste', campagnes: liste } }];\n}\n\nconst brute = campagnes.filter(c => c['Campagne ID'] === demande).pop();\n\nif (!brute) {\n  return [{ json: { type: 'introuvable', campagneId: demande, erreur: 'No campaign with this id.' } }];\n}\n\nconst campagne = resumerCampagne(brute);\ncampagne.prompt = brute['Prompt'] || '';\ncampagne.diagnostic = brute['Diagnostic'] || '';\ncampagne.promptCorrige = brute['Prompt corrige'] || '';\n\nlet analyse = { problemes: [], changements: [], confiance: '' };\ntry {\n  const a = JSON.parse(brute['Analyse'] || '{}');\n  analyse = {\n    problemes: Array.isArray(a.problemes) ? a.problemes : [],\n    changements: Array.isArray(a.changements) ? a.changements : [],\n    confiance: a.confiance || ''\n  };\n} catch (e) {}\ncampagne.problemes = analyse.problemes;\ncampagne.changements = analyse.changements;\ncampagne.confianceAnalyse = analyse.confiance;\n\nconst lignes = resultats.filter(r => r['Campagne ID'] === demande);\n\n// --- Gestion des erreurs -------------------------------------------------\n// Le workflow d erreur passe la campagne en \"erreur\" quand le moteur plante.\n// Filet de securite : si le serveur lui-meme tombe (memoire, redemarrage),\n// aucun workflow d erreur ne tourne. Une campagne encore \"en cours\" au-dela\n// du timeout du moteur (30 min) est alors declaree en erreur ici.\nconst TIMEOUT_MS = 35 * 60 * 1000;\nif (campagne.statut === 'erreur') {\n  return [{ json: { type: 'erreur', campagne, erreur: campagne.diagnostic || 'The run stopped on an error.', cas: [], detail: [] } }];\n}\nif (campagne.statut !== 'termine') {\n  const debut = Date.parse(campagne.date);\n  if (!isNaN(debut) && Date.now() - debut > TIMEOUT_MS) {\n    return [{ json: { type: 'erreur', campagne, erreur: 'The run did not finish within 35 minutes: the server stopped before the end. Launch it again.', cas: [], detail: [] } }];\n  }\n  return [{ json: { type: 'en cours', campagne, cas: [], detail: [] } }];\n}\n\nif (lignes.length === 0) {\n  campagne.resultatsManquants = true;\n  return [{ json: { type: 'campagne', campagne, cas: [], detail: [] } }];\n}\n\nconst prixIn = campagne.cout && typeof campagne.cout.prixIn === 'number' ? campagne.cout.prixIn : 0;\nconst prixOut = campagne.cout && typeof campagne.cout.prixOut === 'number' ? campagne.cout.prixOut : 0;\nconst usd = (tin, tout) => Math.round(((tin * prixIn + tout * prixOut) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  const id = l['Cas ID'];\n  if (!parCas[id]) {\n    parCas[id] = { casId: id, entree: l['Entree'] || '', attendu: l['Attendu'] || '', sorties: [], scores: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[id];\n  c.total += 1;\n  if (String(l['Reussi']).toLowerCase() === 'oui') c.reussites += 1;\n  c.sorties.push(String(l['Sortie'] == null ? '' : l['Sortie']));\n  const s = nombreOuNull(l['Score']);\n  if (s !== null) c.scores.push(s);\n  c.tIn += nombreOuNull(l['Tokens entree']) || 0;\n  c.tOut += nombreOuNull(l['Tokens sortie']) || 0;\n});\n\nconst cas = Object.values(parCas).map(c => {\n  // Deduplication insensible a la casse, mais on renvoie le texte tel qu il a ete produit.\n  const vues = {};\n  const distinctes = [];\n  c.sorties.forEach(s => {\n    const cle = s.toLowerCase().trim();\n    if (!vues[cle]) { vues[cle] = true; distinctes.push(s.trim()); }\n  });\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes,\n    exemple: (c.sorties[0] || '').trim(),\n    scores: c.scores,\n    scoreMoyen: c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null,\n    scoreMin: c.scores.length ? Math.min.apply(null, c.scores) : null,\n    scoreMax: c.scores.length ? Math.max.apply(null, c.scores) : null,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: c.tIn || c.tOut ? usd(c.tIn, c.tOut) : null\n  };\n}).sort((a, b) => a.casId.localeCompare(b.casId, undefined, { numeric: true }));\n\nconst detail = lignes.map(l => ({\n  casId: l['Cas ID'],\n  repetition: Number(l['Repetition']) || 0,\n  sortie: l['Sortie'] || '',\n  reussi: String(l['Reussi']).toLowerCase() === 'oui',\n  score: nombreOuNull(l['Score']),\n  justification: l['Justification'] || '',\n  erreur: l['Erreur'] || '',\n  tokensIn: nombreOuNull(l['Tokens entree']),\n  tokensOut: nombreOuNull(l['Tokens sortie'])\n}));\n\nreturn [{ json: { type: 'campagne', campagne, cas, detail } }];"
+        "jsCode": "const requete = $('Demander les resultats').first().json;\nconst demande = String((requete.query && requete.query.campagneId) || '').trim();\n\nconst campagnes = ($('Agreger les campagnes').first().json.campagnes || [])\n  .filter(c => c && c['Campagne ID']);\nconst resultats = ($input.first().json.resultats || [])\n  .filter(r => r && r['Campagne ID']);\n\nfunction nombreOuNull(v) {\n  if (v === '' || v == null) return null;\n  const n = Number(v);\n  return isNaN(n) ? null : n;\n}\n\n// La ventilation du cout est stockee en JSON avec la campagne, tarif compris.\n// On la relit telle quelle : une campagne ancienne garde le prix qui\n// s appliquait le jour ou elle a tourne, meme si la grille a change depuis.\nfunction lireCout(c) {\n  try {\n    const o = JSON.parse(c['Cout detail'] || '{}');\n    if (o && typeof o.total === 'number') return o;\n  } catch (e) {}\n  const total = nombreOuNull(c['Cout USD']);\n  return total === null ? null : { total, estime: true };\n}\n\nfunction resumerCampagne(c) {\n  return {\n    campagneId: c['Campagne ID'],\n    date: c['Date'] || '',\n    nom: c['Nom'] || '',\n    mode: c['Mode'] || '',\n    temperature: nombreOuNull(c['Temperature']),\n    repetitions: Number(c['Repetitions']) || 0,\n    nbCas: Number(c['Nb cas']) || 0,\n    nbAppels: Number(c['Nb appels']) || 0,\n    statut: c['Statut'] || '',\n    tauxReussite: nombreOuNull(c['Taux reussite']),\n    casInstables: nombreOuNull(c['Cas instables']),\n    scoreMoyen: nombreOuNull(c['Score moyen']),\n    tokensEntree: nombreOuNull(c['Tokens entree']),\n    tokensSortie: nombreOuNull(c['Tokens sortie']),\n    cout: lireCout(c)\n  };\n}\n\nif (!demande) {\n  // Plus recente d abord, triee par date : l ordre des lignes du Sheet n est pas fiable\n  // (des lignes supprimees a la main laissent des trous ou l append s insere).\n  const liste = campagnes.map(resumerCampagne).sort((a, b) => String(b.date).localeCompare(String(a.date)));\n  return [{ json: { type: 'liste', campagnes: liste } }];\n}\n\nconst brute = campagnes.filter(c => c['Campagne ID'] === demande).pop();\n\nif (!brute) {\n  return [{ json: { type: 'introuvable', campagneId: demande, erreur: 'No campaign with this id.' } }];\n}\n\nconst campagne = resumerCampagne(brute);\ncampagne.prompt = brute['Prompt'] || '';\ncampagne.diagnostic = brute['Diagnostic'] || '';\ncampagne.promptCorrige = brute['Prompt corrige'] || '';\n\nlet analyse = { problemes: [], changements: [], confiance: '' };\ntry {\n  const a = JSON.parse(brute['Analyse'] || '{}');\n  analyse = {\n    problemes: Array.isArray(a.problemes) ? a.problemes : [],\n    changements: Array.isArray(a.changements) ? a.changements : [],\n    confiance: a.confiance || ''\n  };\n} catch (e) {}\ncampagne.problemes = analyse.problemes;\ncampagne.changements = analyse.changements;\ncampagne.confianceAnalyse = analyse.confiance;\n\nconst lignes = resultats.filter(r => r['Campagne ID'] === demande);\n\n// --- Gestion des erreurs -------------------------------------------------\n// Le workflow d erreur passe la campagne en \"erreur\" quand le moteur plante.\n// Filet de securite : si le serveur lui-meme tombe (memoire, redemarrage),\n// aucun workflow d erreur ne tourne. Une campagne encore \"en cours\" au-dela\n// du timeout du moteur (30 min) est alors declaree en erreur ici.\nconst TIMEOUT_MS = 35 * 60 * 1000;\nif (campagne.statut === 'erreur') {\n  return [{ json: { type: 'erreur', campagne, erreur: campagne.diagnostic || 'The run stopped on an error.', cas: [], detail: [] } }];\n}\nif (campagne.statut !== 'termine') {\n  const debut = Date.parse(campagne.date);\n  if (!isNaN(debut) && Date.now() - debut > TIMEOUT_MS) {\n    return [{ json: { type: 'erreur', campagne, erreur: 'The run did not finish within 35 minutes: the server stopped before the end. Launch it again.', cas: [], detail: [] } }];\n  }\n  return [{ json: { type: 'en cours', campagne, cas: [], detail: [] } }];\n}\n\nif (lignes.length === 0) {\n  campagne.resultatsManquants = true;\n  return [{ json: { type: 'campagne', campagne, cas: [], detail: [] } }];\n}\n\nconst prixIn = campagne.cout && typeof campagne.cout.prixIn === 'number' ? campagne.cout.prixIn : 0;\nconst prixOut = campagne.cout && typeof campagne.cout.prixOut === 'number' ? campagne.cout.prixOut : 0;\nconst usd = (tin, tout) => Math.round(((tin * prixIn + tout * prixOut) / 1e6) * 1e6) / 1e6;\n\nconst parCas = {};\nlignes.forEach(l => {\n  const id = l['Cas ID'];\n  if (!parCas[id]) {\n    parCas[id] = { casId: id, entree: l['Entree'] || '', attendu: l['Attendu'] || '', sorties: [], scores: [], reussites: 0, total: 0, tIn: 0, tOut: 0 };\n  }\n  const c = parCas[id];\n  c.total += 1;\n  if (String(l['Reussi']).toLowerCase() === 'oui') c.reussites += 1;\n  c.sorties.push(String(l['Sortie'] == null ? '' : l['Sortie']));\n  const s = nombreOuNull(l['Score']);\n  if (s !== null) c.scores.push(s);\n  c.tIn += nombreOuNull(l['Tokens entree']) || 0;\n  c.tOut += nombreOuNull(l['Tokens sortie']) || 0;\n});\n\nconst cas = Object.values(parCas).map(c => {\n  // Deduplication insensible a la casse, mais on renvoie le texte tel qu il a ete produit.\n  const vues = {};\n  const distinctes = [];\n  c.sorties.forEach(s => {\n    const cle = s.toLowerCase().trim();\n    if (!vues[cle]) { vues[cle] = true; distinctes.push(s.trim()); }\n  });\n  let statut = 'echec';\n  if (c.reussites === c.total) statut = 'reussi';\n  else if (c.reussites > 0) statut = 'instable';\n  return {\n    casId: c.casId,\n    entree: c.entree,\n    attendu: c.attendu,\n    reussites: c.reussites,\n    total: c.total,\n    statut,\n    stable: distinctes.length === 1,\n    sortiesDistinctes: distinctes,\n    exemple: (c.sorties[0] || '').trim(),\n    scores: c.scores,\n    scoreMoyen: c.scores.length ? Math.round(c.scores.reduce((a, b) => a + b, 0) / c.scores.length * 10) / 10 : null,\n    scoreMin: c.scores.length ? Math.min.apply(null, c.scores) : null,\n    scoreMax: c.scores.length ? Math.max.apply(null, c.scores) : null,\n    tokensIn: c.tIn,\n    tokensOut: c.tOut,\n    cout: c.tIn || c.tOut ? usd(c.tIn, c.tOut) : null\n  };\n}).sort((a, b) => a.casId.localeCompare(b.casId, undefined, { numeric: true }));\n\nconst detail = lignes.map(l => ({\n  casId: l['Cas ID'],\n  repetition: Number(l['Repetition']) || 0,\n  sortie: l['Sortie'] || '',\n  reussi: String(l['Reussi']).toLowerCase() === 'oui',\n  score: nombreOuNull(l['Score']),\n  justification: l['Justification'] || '',\n  erreur: l['Erreur'] || '',\n  tokensIn: nombreOuNull(l['Tokens entree']),\n  tokensOut: nombreOuNull(l['Tokens sortie'])\n}));\n\nreturn [{ json: { type: 'campagne', campagne, cas, detail } }];"
       },
-      "id": "35093e6c-0d42-4094-b551-d0fa7f6a0cd8",
+      "id": "d86342fa-20d6-4510-b644-297aca5d3e16",
       "name": "Construire la reponse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -162,7 +164,7 @@
           }
         }
       },
-      "id": "6ed8f48e-ea34-42ba-a4a0-a6a455a5220d",
+      "id": "1bdb9011-9adf-4906-91fa-e5f6f8eaea48",
       "name": "Repondre les resultats",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
@@ -178,7 +180,7 @@
         "width": 368,
         "color": 4
       },
-      "id": "92a9387e-90f7-4123-8cc8-456cd0a4e928",
+      "id": "85f28f0e-02e4-4cda-9ce0-04804be39bf7",
       "name": "Sticky Note d840f4b6",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -194,7 +196,7 @@
         "width": 336,
         "color": 5
       },
-      "id": "3cbf8932-61a1-4c13-a60c-108a744e530a",
+      "id": "07266683-d783-4e33-9615-a4fa4f07cd80",
       "name": "Sticky Note dd2c48e6",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -202,8 +204,58 @@
         -112,
         576
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { const id = String(($('Demander les resultats').first().json.query || {}).campagneId || '').trim(); if (!id) return false; const c = ($json.campagnes || []).filter(x => x && x['Campagne ID'] === id).pop(); return !!c && c['Statut'] === 'termine'; })() }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "ba8bdbc8-9506-40ff-b2ef-92677e7097b7",
+      "name": "Besoin des resultats ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Role de chaque node (API de lecture)\nLance par la web app : fetch GET https://136-71-225-7.sslip.io/webhook/eval-results (toutes les 3 s pendant un run, et pour l ecran History).\n\n- **Demander les resultats** (Webhook GET /eval-results) : sans parametre = liste des runs ; avec ?campagneId= = detail d un run.\n- **Lire les campagnes** (Google Sheets) : lit l onglet campagnes, 4 retries espaces de 4 s (quota Google).\n- **Agreger les campagnes** (Aggregate) : regroupe toutes les lignes en 1 item.\n- **Besoin des resultats ?** (If) : lit l onglet resultats seulement si un run precis est demande ET termine (economise les lectures).\n- **Lire les resultats** (Google Sheets) : lit l onglet resultats, 4 retries.\n- **Agreger les resultats** (Aggregate) : regroupe en 1 item.\n- **Construire la reponse** (Code) : renvoie liste / introuvable / en cours / erreur / campagne (detail par cas). Un run en cours depuis plus de 35 min est declare en erreur.\n- **Repondre les resultats** (Respond to Webhook) : renvoie le JSON, Cache-Control no-store.",
+        "height": 460,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "0fa4b342-46e7-43d0-86f7-1b0271cbaf9a",
+      "name": "Role de chaque node",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        912
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Demander les resultats": {
       "main": [
@@ -221,17 +273,6 @@
         [
           {
             "node": "Agreger les campagnes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Agreger les campagnes": {
-      "main": [
-        [
-          {
-            "node": "Lire les resultats",
             "type": "main",
             "index": 0
           }
@@ -270,11 +311,51 @@
           }
         ]
       ]
+    },
+    "Agreger les campagnes": {
+      "main": [
+        [
+          {
+            "node": "Besoin des resultats ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Besoin des resultats ?": {
+      "main": [
+        [
+          {
+            "node": "Lire les resultats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construire la reponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "timezone": "Europe/Paris"
-  }
+    "availableInMCP": true,
+    "errorWorkflow": "1OHDQmTcGqp3PkPg"
+  },
+  "versionId": "1b380e1d-0141-49b2-8e9a-825af1880852",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "945b50218eb566fea5c9af4fada3bb82adcad98317d5a8bffbc6094961a9baa2"
+  },
+  "nodeGroups": [],
+  "id": "b3ANtjJDva81cvsi",
+  "tags": []
 }

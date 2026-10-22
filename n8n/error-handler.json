@@ -2,46 +2,37 @@
   "name": "Banc eval - gestion des erreurs",
   "nodes": [
     {
+      "parameters": {},
       "id": "03ca16a6-4900-4b74-9c0a-f801670ddc22",
       "name": "Quand un workflow plante",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
         0,
-        300
-      ],
-      "parameters": {}
+        304
+      ]
     },
     {
+      "parameters": {
+        "jsCode": "// L Error Trigger recoit l execution qui a plante et le workflow concerne.\n// On en tire une ligne lisible : ou, quoi, et le lien vers l execution.\nconst e = $input.first().json;\nconst ex = e.execution || {};\nconst err = ex.error || (e.trigger && e.trigger.error) || {};\nconst wf = e.workflow || {};\nreturn [{ json: {\n  date: $now.toISO(),\n  workflowId: String(wf.id || ''),\n  workflow: String(wf.name || ''),\n  noeud: String(ex.lastNodeExecuted || (err.node && err.node.name) || ''),\n  message: String(err.message || 'Unknown error').slice(0, 500),\n  executionId: String(ex.id || ''),\n  lien: String(ex.url || '')\n} }];"
+      },
       "id": "fe20bf7c-00c7-400b-ac2e-5a77a160018b",
       "name": "Decrire l erreur",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         240,
-        300
-      ],
-      "parameters": {
-        "jsCode": "// L Error Trigger recoit l execution qui a plante et le workflow concerne.\n// On en tire une ligne lisible : ou, quoi, et le lien vers l execution.\nconst e = $input.first().json;\nconst ex = e.execution || {};\nconst err = ex.error || (e.trigger && e.trigger.error) || {};\nconst wf = e.workflow || {};\nreturn [{ json: {\n  date: $now.toISO(),\n  workflowId: String(wf.id || ''),\n  workflow: String(wf.name || ''),\n  noeud: String(ex.lastNodeExecuted || (err.node && err.node.name) || ''),\n  message: String(err.message || 'Unknown error').slice(0, 500),\n  executionId: String(ex.id || ''),\n  lien: String(ex.url || '')\n} }];"
-      }
+        304
+      ]
     },
     {
-      "id": "cf34bb87-0f92-417a-87fc-a879c2fce002",
-      "name": "Journaliser l erreur",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [
-        480,
-        300
-      ],
-      "onError": "continueRegularOutput",
       "parameters": {
         "authentication": "serviceAccount",
         "operation": "append",
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -118,57 +109,66 @@
         "options": {
           "cellFormat": "RAW"
         }
-      }
+      },
+      "id": "cf34bb87-0f92-417a-87fc-a879c2fce002",
+      "name": "Journaliser l erreur",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
+          "name": "Google Service Account account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ ['KVo0qglolhMvMoId', 'B7cPwKilVzdnCD7u'].includes($('Decrire l erreur').first().json.workflowId) }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
       "id": "92cfffc8-a79f-490a-8fab-9c13d20033b9",
       "name": "Une campagne a plante ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
         720,
-        300
-      ],
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ ['YOUR_ENGINE_WORKFLOW_ID', 'YOUR_BOT_WORKFLOW_ID'].includes($('Decrire l erreur').first().json.workflowId) }}",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              },
-              "rightValue": ""
-            }
-          ],
-          "combinator": "and"
-        }
-      }
+        304
+      ]
     },
     {
-      "id": "9eb66acd-9252-406f-b079-1e03fb91fdd5",
-      "name": "Lire les campagnes en cours",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [
-        960,
-        200
-      ],
-      "executeOnce": true,
       "parameters": {
         "authentication": "serviceAccount",
-        "resource": "sheet",
-        "operation": "read",
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -183,40 +183,48 @@
             }
           ]
         },
-        "options": {
-          "returnAllMatches": "returnAllMatches"
+        "options": {}
+      },
+      "id": "9eb66acd-9252-406f-b079-1e03fb91fdd5",
+      "name": "Lire les campagnes en cours",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        208
+      ],
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
+          "name": "Google Service Account account"
         }
       }
     },
     {
+      "parameters": {
+        "jsCode": "// Le moteur a plante : la campagne qu il traitait est restee \"en cours\"\n// et la page web attendrait indefiniment. On retient les campagnes en cours\n// lancees dans les 45 dernieres minutes (le moteur a un timeout de 30 min)\n// et on les passe en \"erreur\" avec la cause.\nconst err = $('Decrire l erreur').first().json;\nconst maintenant = Date.now();\nconst FENETRE_MS = 45 * 60 * 1000;\nreturn $input.all()\n  .filter(i => i.json['Campagne ID'])\n  .filter(i => { const d = Date.parse(i.json['Date']); return isNaN(d) || maintenant - d < FENETRE_MS; })\n  .map(i => ({ json: {\n    campagneId: i.json['Campagne ID'],\n    diagnostic: 'The run stopped on an error' + (err.noeud ? ' in the node \"' + err.noeud + '\"' : '') + ': ' + err.message\n  } }));"
+      },
       "id": "f61e2900-73f5-40bf-9425-9eeec4f09bdf",
       "name": "Campagnes interrompues",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1200,
-        200
-      ],
-      "parameters": {
-        "jsCode": "// Le moteur a plante : la campagne qu il traitait est restee \"en cours\"\n// et la page web attendrait indefiniment. On retient les campagnes en cours\n// lancees dans les 45 dernieres minutes (le moteur a un timeout de 30 min)\n// et on les passe en \"erreur\" avec la cause.\nconst err = $('Decrire l erreur').first().json;\nconst maintenant = Date.now();\nconst FENETRE_MS = 45 * 60 * 1000;\nreturn $input.all()\n  .filter(i => i.json['Campagne ID'])\n  .filter(i => { const d = Date.parse(i.json['Date']); return isNaN(d) || maintenant - d < FENETRE_MS; })\n  .map(i => ({ json: {\n    campagneId: i.json['Campagne ID'],\n    diagnostic: 'The run stopped on an error' + (err.noeud ? ' in the node \"' + err.noeud + '\"' : '') + ': ' + err.message\n  } }));"
-      }
+        208
+      ]
     },
     {
-      "id": "ee763741-7199-4673-bbc8-f95edeefcd88",
-      "name": "Marquer la campagne en erreur",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [
-        1440,
-        200
-      ],
       "parameters": {
         "authentication": "serviceAccount",
         "operation": "update",
         "documentId": {
           "__rl": true,
           "mode": "id",
-          "value": "YOUR_GOOGLE_SHEET_ID"
+          "value": "1NJNqVyoGbbGYYHrbGzkYEsBHSINlH8IUavbJiggEa2M"
         },
         "sheetName": {
           "__rl": true,
@@ -266,26 +274,52 @@
         "options": {
           "cellFormat": "RAW"
         }
+      },
+      "id": "ee763741-7199-4673-bbc8-f95edeefcd88",
+      "name": "Marquer la campagne en erreur",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        208
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleApi": {
+          "id": "0BNXI8XCne7N7Zhh",
+          "name": "Google Service Account account"
+        }
       }
     },
     {
-      "id": "a1c3d2e4-5f60-4a7b-8c9d-0e1f2a3b4c5d",
+      "parameters": {
+        "content": "## Gestion des erreurs\n\nBranche comme **Error Workflow** du moteur (site), de l API de lecture et du bot Telegram. Des qu une execution de production plante, n8n lance ce workflow.\n\n1. L erreur est journalisee dans l onglet **erreurs** du Google Sheet : workflow, noeud, message, lien vers l execution.\n2. Une alerte part sur Telegram.\n3. Si une campagne etait en cours, elle passe en **erreur** avec la cause : la page web arrete d attendre et l affiche.\n\nEn amont : 5 tentatives espacees de 5 s sur chaque appel a Claude, timeout de 30 min, et l API de lecture declare en erreur toute campagne en cours depuis plus de 35 min (cas ou le serveur lui-meme tombe).",
+        "height": 300,
+        "width": 520,
+        "color": 3
+      },
+      "id": "d4efea38-18af-4eb7-bc8e-a7c78616a1ea",
       "name": "Note gestion des erreurs",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
         0,
-        -120
-      ],
-      "parameters": {
-        "content": "## Gestion des erreurs\n\nBranche comme **Error Workflow** du moteur (site) et du bot Telegram. Des qu une execution de production plante, n8n lance ce workflow.\n\n1. L erreur est journalisee dans l onglet **erreurs** du Google Sheet.\n2. Une alerte part sur Telegram.\n3. Si une campagne etait en cours, elle passe en **erreur** avec la cause : la page web arrete d attendre et l affiche.\n\nEn amont : 5 tentatives espacees de 5 s sur chaque appel Groq, timeout de 30 min, et l API de lecture declare en erreur toute campagne en cours depuis plus de 35 min.",
-        "height": 300,
-        "width": 520,
-        "color": 3
-      }
+        -128
+      ]
     },
     {
-      "id": "f92f6c3f-e036-4c40-a83e-cd006ecdab26",
+      "parameters": {
+        "chatId": "8927473341",
+        "text": "=⚠️ <b>Prompt Bench error</b>\nWorkflow: {{ $('Decrire l erreur').first().json.workflow.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\nNode: {{ $('Decrire l erreur').first().json.noeud.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\n{{ $('Decrire l erreur').first().json.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\nExecution: {{ $('Decrire l erreur').first().json.lien || $('Decrire l erreur').first().json.executionId }}\n\nLogged in the erreurs tab of the Google Sheet.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "ea7ca960-800d-4b59-8ace-4f1f1929e460",
       "name": "Alerter sur Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -293,42 +327,74 @@
         720,
         480
       ],
-      "onError": "continueRegularOutput",
-      "parameters": {
-        "resource": "message",
-        "operation": "sendMessage",
-        "chatId": "YOUR_TELEGRAM_CHAT_ID",
-        "text": "=⚠️ <b>Prompt Bench error</b>\nWorkflow: {{ $('Decrire l erreur').first().json.workflow.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\nNode: {{ $('Decrire l erreur').first().json.noeud.replace(/&/g, '&amp;').replace(/</g, '&lt;') }}\n{{ $('Decrire l erreur').first().json.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\n\nLogged in the erreurs tab of the Google Sheet.",
-        "additionalFields": {
-          "appendAttribution": false,
-          "parse_mode": "HTML",
-          "disable_web_page_preview": true
-        }
-      },
+      "webhookId": "cda3c7f9-238d-4e40-902c-ba561d02c2af",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "credentials": {
         "telegramApi": {
+          "id": "6zP1aOyhX94K6G0B",
           "name": "Prompt Bench Bot"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ !($json.workflowId === 'b3ANtjJDva81cvsi' && /too many requests|rate limit|quota|429/i.test($json.message)) }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "059d34b2-8a5b-487b-8ae3-e009dbefc8ce",
+      "name": "Erreur a signaler ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        368,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Role de chaque node (gestion des erreurs)\nLance automatiquement par n8n quand le moteur, l API de lecture ou le bot plante en production (reglage Error Workflow de ces workflows).\n\n- **Quand un workflow plante** (Error Trigger) : recoit l execution qui a plante.\n- **Decrire l erreur** (Code) : date, workflow, node, message, ID et lien de l execution.\n- **Erreur a signaler ?** (If) : ignore seulement le quota Google depasse sur l API de lecture (la page reessaie seule).\n- **Journaliser l erreur** (Google Sheets) : 1 ligne dans l onglet erreurs.\n- **Alerter sur Telegram** (Telegram) : alerte avec workflow, node et message.\n- **Une campagne a plante ?** (If) : l erreur vient du moteur ou du bot ?\n- **Lire les campagnes en cours** (Google Sheets) : campagnes au statut \"en cours\".\n- **Campagnes interrompues** (Code) : garde celles des 45 dernieres minutes et prepare la cause.\n- **Marquer la campagne en erreur** (Google Sheets) : statut \"erreur\" + cause, la page arrete d attendre.",
+        "height": 460,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "d46acb24-6725-43ef-847c-88bfb310d9ab",
+      "name": "Role de chaque node",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        704
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Quand un workflow plante": {
       "main": [
         [
           {
             "node": "Decrire l erreur",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Decrire l erreur": {
-      "main": [
-        [
-          {
-            "node": "Journaliser l erreur",
             "type": "main",
             "index": 0
           }
@@ -383,9 +449,43 @@
           }
         ]
       ]
+    },
+    "Decrire l erreur": {
+      "main": [
+        [
+          {
+            "node": "Erreur a signaler ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Erreur a signaler ?": {
+      "main": [
+        [
+          {
+            "node": "Journaliser l erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "03b63f70-0aa5-4680-b661-ca57e83ff25f",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "945b50218eb566fea5c9af4fada3bb82adcad98317d5a8bffbc6094961a9baa2"
+  },
+  "nodeGroups": [],
+  "id": "1OHDQmTcGqp3PkPg",
+  "tags": []
 }
