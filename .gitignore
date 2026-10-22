@@ -1,0 +1,15 @@
+# Secrets
+.env
+.encryption_key
+.pg_password
+
+# Local Docker data, if bind mounts are used instead of named volumes
+postgres_data/
+n8n_data/
+caddy_data/
+caddy_config/
+volumes/
+
+# System files
+.DS_Store
+Thumbs.db
